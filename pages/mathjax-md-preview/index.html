@@ -4,7 +4,8 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Dark Mode Markdown & LaTeX Preview (UMD Fallback)</title>
+  <!-- Updated Title -->
+  <title>Markdown & LaTeX Preview (with Think Blocks)</title>
   <style>
     /* CSS styles remain the same */
     html,
@@ -156,9 +157,87 @@
       max-width: 100%;
       height: auto;
       background-color: #fff;
+      /* Added for visibility of transparent images */
       padding: 5px;
       border-radius: 3px;
       box-sizing: border-box;
+    }
+
+    /* Styles for the <details> element */
+    #html-output details {
+      border: 1px solid #444;
+      border-radius: 4px;
+      margin: 1em 0;
+      background-color: #2a2a2e;
+      /* Slightly different background */
+    }
+
+    #html-output details[open] {
+      background-color: #2f2f33;
+    }
+
+    #html-output summary {
+      padding: 10px 15px;
+      cursor: pointer;
+      font-weight: bold;
+      color: #a0cfff;
+      /* Lighter blue for summary */
+      background-color: #333;
+      /* Darker background for summary */
+      border-radius: 4px 4px 0 0;
+      /* Rounded corners only on top */
+      outline: none;
+      /* Remove default focus outline */
+      user-select: none;
+      /* Prevent text selection */
+      transition: background-color 0.2s ease;
+    }
+
+    #html-output details[open] summary {
+      border-bottom: 1px solid #444;
+      border-radius: 4px 4px 0 0;
+      /* Ensure corners remain rounded when open */
+    }
+
+    #html-output summary:hover {
+      background-color: #3e3e3e;
+    }
+
+    /* Content inside details */
+    #html-output details>*:not(summary) {
+      padding: 0 15px 15px 15px;
+      /* Padding only for content */
+      margin-top: 10px;
+      /* Add space below summary */
+    }
+
+    /* Ensure first element inside details (after summary) has correct top margin */
+    #html-output details>*:nth-child(2) {
+      /* Selects first element after summary */
+      margin-top: 10px !important;
+    }
+
+    /* Reset margin for elements directly inside details to avoid double margins */
+    #html-output details>p,
+    #html-output details>ul,
+    #html-output details>ol,
+    #html-output details>blockquote,
+    #html-output details>pre,
+    #html-output details>table,
+    #html-output details>h1,
+    #html-output details>h2,
+    #html-output details>h3,
+    #html-output details>h4,
+    #html-output details>h5,
+    #html-output details>h6 {
+      margin-left: 0;
+      margin-right: 0;
+    }
+
+    /* Adjust padding for nested blockquotes etc. if needed */
+    #html-output details blockquote {
+      margin-left: 0;
+      /* Reset blockquote margin inside details */
     }
 
     .MathJax {
@@ -174,75 +253,44 @@
 
   <style>
     /* --- Dark Scrollbar Styles --- */
-
-    /* Standard properties (Firefox & newer browsers) */
-    /* Apply to the root element for global effect */
     html {
       scrollbar-width: thin;
-      /* Can be "auto" or "thin" */
       scrollbar-color: #555 #282828;
-      /* thumb color track color */
     }
 
-    /* WebKit Browsers (Chrome, Safari, Edge, Opera) */
-    /* Apply globally */
     ::-webkit-scrollbar {
       width: 10px;
-      /* Width of vertical scrollbar */
       height: 10px;
-      /* Height of horizontal scrollbar */
     }
 
     ::-webkit-scrollbar-track {
       background: #282828;
-      /* Slightly different dark color for the track */
       border-radius: 5px;
-      /* Optional: round the corners */
     }
 
     ::-webkit-scrollbar-thumb {
       background-color: #555;
-      /* A visible grey for the thumb */
       border-radius: 5px;
-      /* Optional: round the corners */
       border: 2px solid #282828;
-      /* Optional: Creates padding around thumb, use track color */
     }
 
     ::-webkit-scrollbar-thumb:hover {
       background-color: #777;
-      /* Lighter grey on hover */
     }
 
     ::-webkit-scrollbar-thumb:active {
       background-color: #888;
-      /* Slightly lighter again when clicked */
     }
 
-    /* Optional: Style the corner where scrollbars meet */
     ::-webkit-scrollbar-corner {
       background: #282828;
-      /* Match track background */
     }
-
-    /* You can also target specific elements if needed, like: */
-    /*
-#markdown-input::-webkit-scrollbar-thumb,
-#html-output::-webkit-scrollbar-thumb {
-   background-color: #606060;
-}
-
-#markdown-input,
-#html-output {
-   scrollbar-color: #606060 #333333;
-}
-*/
   </style>
 
-  <!-- 1. Load markdown-it (UMD build from jsDelivr) -->
+  <!-- 1. Load markdown-it -->
   <script src="https://cdn.jsdelivr.net/npm/markdown-it@14.1.0/dist/markdown-it.min.js"></script>
 
-  <!-- 2. Load markdown-it-mathjax3 plugin (UMD build from jsDelivr) -->
+  <!-- 2. Load markdown-it-mathjax3 plugin -->
   <script src="https://cdn.jsdelivr.net/npm/markdown-it-mathjax@2.0.0/markdown-it-mathjax.min.js"></script>
 
   <!-- 3. Configure MathJax -->
@@ -256,6 +304,8 @@
         processRefs: true
       },
       options: {
+        // Important: Do NOT skip 'details' or 'summary' tags here
+        // Let MathJax process content inside them
         skipHtmlTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code'],
         ignoreHtmlClass: 'tex2jax_ignore',
         processHtmlClass: 'tex2jax_process'
@@ -264,7 +314,7 @@
         fontCache: 'global'
       },
       startup: {
-        typeset: false
+        typeset: false // We'll call typesetting manually
       }
     };
   </script>
@@ -273,6 +323,7 @@
   <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js" id="MathJax-script" async></script>
 
   <style>
+    /* --- Header Styles --- */
     body header {
       display: flex;
       align-items: center;
@@ -283,7 +334,6 @@
       font-family: "Consolas", "Monaco", monospace;
       font-size: 0.95em;
       box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-
       border-bottom: 1px solid #444;
       height: var(--header-h);
       box-sizing: border-box;
@@ -308,20 +358,49 @@
 
 <body>
   <header>
+    <!-- Updated Header Title -->
     <h1>Markdown Preview <small>with MathJax</small></h1>
     <a href="https://github.com/lenML/page-tools" target="_blank">github</a>
   </header>
   <div class="container">
-    <textarea id="markdown-input" placeholder="Type your Markdown and LaTeX here (use single backslashes!)..."># Welcome!
+    <textarea id="markdown-input"
+      placeholder="Type Markdown, LaTeX (use $, $$, \(, \[, etc.), and <think>...</think> blocks here..."># Welcome!
 
-This preview uses `markdown-it` and `markdown-it-mathjax3` .
+This preview uses `markdown-it` and `markdown-it-mathjax3`.
 Use **single backslashes** for LaTeX: \( E = mc^2 \) and \[ \nabla \times \mathbf{B} = \mu_0 \mathbf{J} \]
 
 Also works with dollars: $ E = mc^2 $ and $$ \nabla \times \mathbf{B} = \mu_0 \mathbf{J} $$
 
 ```html
 <p>HTML test</p>
-```</textarea>
+```
+
+## Think Blocks
+
+Use `<think>` tags to wrap content you want hidden by default.
+
+<think>
+This is a thought process block.
+
+* It can contain **Markdown**.
+* And lists.
+* And `code`.
+* Even LaTeX: $ \alpha + \beta = \gamma $
+
+```javascript
+function hello() {
+  console.log("Hello from inside a think block!");
+}
+```
+</think>
+
+Another paragraph here.
+
+<think>
+Here's another thought:
+$$ \int_0^\infty e^{-x^2} dx = \frac{\sqrt{\pi}}{2} $$
+</think>
+</textarea>
 
     <div id="html-output">
       <!-- Preview will be rendered here -->
@@ -340,9 +419,6 @@ Also works with dollars: $ E = mc^2 $ and $$ \nabla \times \mathbf{B} = \mu_0 \m
         console.error("markdown-it is not loaded!");
         return;
       }
-      // Note: Check the actual global name exposed by the UMD plugin build
-      // It might be markdownitMathjax3 or something else. Inspect window object if unsure.
-      // Based on the file name 'markdown-it-mathjax3.umd.min.js', 'markdownitMathjax3' is likely.
       if (typeof window.markdownitMathjax !== 'function') {
         console.error("markdown-it-mathjax3 plugin not loaded or not a function. Actual value:", window.markdownitMathjax);
         htmlOutput.innerHTML = '<p style="color: red; font-weight: bold;">Error: markdown-it-mathjax3 plugin failed to load. Check CDN link or global name.</p>';
@@ -351,14 +427,14 @@ Also works with dollars: $ E = mc^2 $ and $$ \nabla \times \mathbf{B} = \mu_0 \m
 
       console.log("markdown-it and plugin appear loaded. Initializing...");
       const md = window.markdownit({
-        html: true,
+        html: true,       // *** IMPORTANT: Allow HTML tags like <think> to pass through ***
         linkify: true,
         typographer: true
       }).use(window.markdownitMathjax); // Use the global plugin object
 
       console.log("markdown-it initialized.");
 
-      // --- Rest of the code (debounce, update function, event listeners) ---
+      // --- Debounce Function ---
       function debounce(func, wait) {
         let timeout;
         return function executedFunction(...args) {
@@ -371,38 +447,81 @@ Also works with dollars: $ E = mc^2 $ and $$ \nabla \times \mathbf{B} = \mu_0 \m
         };
       }
 
+      // --- Update Preview Function ---
       function updatePreview() {
         try {
-          const markdownText = markdownInput.value.replace(/\\/ig, "\\\\");
+          // 1. Render Markdown to HTML (keeping <think> tags)
+          // Note: Backslash replacement is usually handled by markdown-it-mathjax correctly
+          // if using $, $$, \(, \), \[, \]. Avoid double-escaping unless specific issues arise.
+          const markdownText = markdownInput.value.replace(/\\/ig, "\\\\")
+          // const markdownText = markdownInput.value;
           const rawHtml = md.render(markdownText);
-          htmlOutput.innerHTML = rawHtml;
 
-          // Trigger MathJax typesetting
+          // 2. Post-process HTML to convert <think> to <details>
+          const tempDiv = document.createElement('div');
+          tempDiv.innerHTML = rawHtml; // Parse the rendered HTML
+
+          const thinkElements = tempDiv.querySelectorAll('think'); // Find all <think> elements
+
+          thinkElements.forEach(thinkElement => {
+            const details = document.createElement('details');
+            const summary = document.createElement('summary');
+            summary.textContent = 'Thinking Process'; // Set the summary text
+
+            // Move all child nodes from <think> to <details>
+            while (thinkElement.firstChild) {
+              details.appendChild(thinkElement.firstChild);
+            }
+
+            // Add the summary as the first child of <details>
+            details.insertBefore(summary, details.firstChild);
+
+            // Replace the original <think> element with the new <details> element
+            thinkElement.parentNode.replaceChild(details, thinkElement);
+          });
+
+          // 3. Put the modified HTML into the output container
+          htmlOutput.innerHTML = tempDiv.innerHTML;
+
+          // 4. Trigger MathJax typesetting on the final HTML
           if (window.MathJax && window.MathJax.typesetPromise) {
-            MathJax.texReset();
-            MathJax.typesetClear([htmlOutput]);
+            // MathJax 3 is ready
+            MathJax.texReset?.(); // Optional: reset TeX state if needed
+            MathJax.typesetClear?.([htmlOutput]); // Optional: clear previous typesetting results
             window.MathJax.typesetPromise([htmlOutput])
               .catch((err) => console.error('MathJax Typesetting Error:', err));
-          } else if (window.MathJax && window.MathJax.startup) {
+          } else if (window.MathJax && window.MathJax.startup?.promise) {
+            // MathJax 3 might still be starting up
             window.MathJax.startup.promise.then(() => {
-              MathJax.texReset();
-              MathJax.typesetClear([htmlOutput]);
+              console.log("MathJax startup complete, typesetting now.");
+              MathJax.texReset?.();
+              MathJax.typesetClear?.([htmlOutput]);
               window.MathJax.typesetPromise([htmlOutput])
                 .catch((err) => console.error('MathJax Typesetting Error (startup):', err));
             });
           } else {
             console.warn("MathJax not ready yet for typesetting.");
+            // Optionally queue the typesetting call if MathJax loading takes time
           }
         } catch (renderError) {
-          console.error("Error during Markdown rendering or MathJax typesetting:", renderError);
-          htmlOutput.innerHTML = `<p style="color: orange;">Error during rendering: ${renderError.message}</p>`;
+          console.error("Error during Markdown rendering, HTML processing, or MathJax typesetting:", renderError);
+          // Display error safely
+          const errorMsg = document.createElement('p');
+          errorMsg.style.color = 'orange';
+          errorMsg.textContent = `Error during rendering: ${renderError.message}`;
+          htmlOutput.innerHTML = ''; // Clear previous potentially broken content
+          htmlOutput.appendChild(errorMsg);
         }
       }
 
+      // --- Event Listener Setup ---
       const debouncedUpdatePreview = debounce(updatePreview, 250);
       markdownInput.addEventListener('input', debouncedUpdatePreview);
 
+      // --- Initial Render ---
       console.log("Setting up initial preview...");
+      // Use a small delay to ensure MathJax has a chance to load, especially on slower connections
+      // Although the typesetPromise logic should handle readiness checks.
       setTimeout(updatePreview, 150);
 
     }); // End of DOMContentLoaded listener
