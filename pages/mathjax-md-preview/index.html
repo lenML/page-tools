@@ -1,0 +1,413 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dark Mode Markdown & LaTeX Preview (UMD Fallback)</title>
+  <style>
+    /* CSS styles remain the same */
+    html,
+    body {
+      height: 100%;
+      margin: 0;
+      padding: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol";
+      background-color: #1e1e1e;
+      color: #d4d4d4;
+      font-size: 16px;
+      line-height: 1.6;
+    }
+
+    :root {
+      --header-h: 70px;
+    }
+
+    body {
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .container {
+      flex: 1;
+      display: flex;
+      width: 100vw;
+      height: calc(100vh - var(--header-h));
+    }
+
+    #markdown-input {
+      flex: 1;
+      padding: 20px;
+      box-sizing: border-box;
+      border: none;
+      border-right: 1px solid #444;
+      background-color: #252526;
+      color: #d4d4d4;
+      font-family: "Consolas", "Monaco", monospace;
+      font-size: 0.95em;
+      line-height: 1.5;
+      resize: none;
+      outline: none;
+    }
+
+    #html-output {
+      flex: 1;
+      padding: 20px;
+      box-sizing: border-box;
+      overflow-y: auto;
+      background-color: #1e1e1e;
+    }
+
+    /* Dark Mode Styles */
+    #html-output h1,
+    #html-output h2,
+    #html-output h3,
+    #html-output h4,
+    #html-output h5,
+    #html-output h6 {
+      color: #569cd6;
+      border-bottom: 1px solid #444;
+      padding-bottom: 0.3em;
+      margin-top: 1.5em;
+      margin-bottom: 1em;
+    }
+
+    #html-output h1 {
+      font-size: 2em;
+    }
+
+    #html-output h2 {
+      font-size: 1.6em;
+    }
+
+    #html-output h3 {
+      font-size: 1.3em;
+    }
+
+    #html-output a {
+      color: #6a99ff;
+      text-decoration: none;
+    }
+
+    #html-output a:hover {
+      text-decoration: underline;
+    }
+
+    #html-output code {
+      background-color: #333;
+      padding: 0.2em 0.4em;
+      border-radius: 3px;
+      font-family: "Consolas", "Monaco", monospace;
+      font-size: 0.9em;
+      color: #ce9178;
+    }
+
+    #html-output pre {
+      background-color: #282828;
+      padding: 15px;
+      border-radius: 5px;
+      overflow-x: auto;
+      border: 1px solid #444;
+    }
+
+    #html-output pre code {
+      background-color: transparent;
+      padding: 0;
+      color: #d4d4d4;
+      font-size: 0.9em;
+    }
+
+    #html-output blockquote {
+      border-left: 4px solid #555;
+      padding-left: 15px;
+      margin-left: 0;
+      color: #aaa;
+    }
+
+    #html-output ul,
+    #html-output ol {
+      padding-left: 25px;
+    }
+
+    #html-output li {
+      margin-bottom: 0.5em;
+    }
+
+    #html-output table {
+      border-collapse: collapse;
+      margin: 1em 0;
+      width: auto;
+      border: 1px solid #555;
+    }
+
+    #html-output th,
+    #html-output td {
+      border: 1px solid #555;
+      padding: 8px 12px;
+    }
+
+    #html-output th {
+      background-color: #333;
+      font-weight: bold;
+    }
+
+    #html-output img {
+      max-width: 100%;
+      height: auto;
+      background-color: #fff;
+      padding: 5px;
+      border-radius: 3px;
+      box-sizing: border-box;
+    }
+
+    .MathJax {
+      outline: none;
+    }
+
+    mjx-container {
+      color: #d4d4d4 !important;
+      overflow-x: auto;
+      overflow-y: hidden;
+    }
+  </style>
+
+  <style>
+    /* --- Dark Scrollbar Styles --- */
+
+    /* Standard properties (Firefox & newer browsers) */
+    /* Apply to the root element for global effect */
+    html {
+      scrollbar-width: thin;
+      /* Can be "auto" or "thin" */
+      scrollbar-color: #555 #282828;
+      /* thumb color track color */
+    }
+
+    /* WebKit Browsers (Chrome, Safari, Edge, Opera) */
+    /* Apply globally */
+    ::-webkit-scrollbar {
+      width: 10px;
+      /* Width of vertical scrollbar */
+      height: 10px;
+      /* Height of horizontal scrollbar */
+    }
+
+    ::-webkit-scrollbar-track {
+      background: #282828;
+      /* Slightly different dark color for the track */
+      border-radius: 5px;
+      /* Optional: round the corners */
+    }
+
+    ::-webkit-scrollbar-thumb {
+      background-color: #555;
+      /* A visible grey for the thumb */
+      border-radius: 5px;
+      /* Optional: round the corners */
+      border: 2px solid #282828;
+      /* Optional: Creates padding around thumb, use track color */
+    }
+
+    ::-webkit-scrollbar-thumb:hover {
+      background-color: #777;
+      /* Lighter grey on hover */
+    }
+
+    ::-webkit-scrollbar-thumb:active {
+      background-color: #888;
+      /* Slightly lighter again when clicked */
+    }
+
+    /* Optional: Style the corner where scrollbars meet */
+    ::-webkit-scrollbar-corner {
+      background: #282828;
+      /* Match track background */
+    }
+
+    /* You can also target specific elements if needed, like: */
+    /*
+#markdown-input::-webkit-scrollbar-thumb,
+#html-output::-webkit-scrollbar-thumb {
+   background-color: #606060;
+}
+
+#markdown-input,
+#html-output {
+   scrollbar-color: #606060 #333333;
+}
+*/
+  </style>
+
+  <!-- 1. Load markdown-it (UMD build from jsDelivr) -->
+  <script src="https://cdn.jsdelivr.net/npm/markdown-it@14.1.0/dist/markdown-it.min.js"></script>
+
+  <!-- 2. Load markdown-it-mathjax3 plugin (UMD build from jsDelivr) -->
+  <script src="https://cdn.jsdelivr.net/npm/markdown-it-mathjax@2.0.0/markdown-it-mathjax.min.js"></script>
+
+  <!-- 3. Configure MathJax -->
+  <script>
+    window.MathJax = {
+      tex: {
+        inlineMath: [['$', '$'], ['\\(', '\\)']],
+        displayMath: [['$$', '$$'], ['\\[', '\\]']],
+        processEscapes: true,
+        processEnvironments: true,
+        processRefs: true
+      },
+      options: {
+        skipHtmlTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code'],
+        ignoreHtmlClass: 'tex2jax_ignore',
+        processHtmlClass: 'tex2jax_process'
+      },
+      svg: {
+        fontCache: 'global'
+      },
+      startup: {
+        typeset: false
+      }
+    };
+  </script>
+
+  <!-- 4. Load MathJax -->
+  <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js" id="MathJax-script" async></script>
+
+  <style>
+    body header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 20px;
+      background-color: #252526;
+      color: #d4d4d4;
+      font-family: "Consolas", "Monaco", monospace;
+      font-size: 0.95em;
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+
+      border-bottom: 1px solid #444;
+      height: var(--header-h);
+      box-sizing: border-box;
+    }
+
+    body header h1 {
+      margin: 0;
+    }
+
+    body header h1 small {
+      font-size: 0.5em;
+      font-weight: lighter;
+    }
+
+    body header a {
+      color: #6a99ff;
+      text-decoration: none;
+    }
+  </style>
+
+</head>
+
+<body>
+  <header>
+    <h1>Markdown Preview <small>with MathJax</small></h1>
+    <a href="https://github.com/lenML/page-tools" target="_blank">github</a>
+  </header>
+  <div class="container">
+    <textarea id="markdown-input" placeholder="Type your Markdown and LaTeX here (use single backslashes!)..."># Welcome!
+
+This preview uses `markdown-it` and `markdown-it-mathjax3` .
+Use **single backslashes** for LaTeX: \( E = mc^2 \) and \[ \nabla \times \mathbf{B} = \mu_0 \mathbf{J} \]
+
+Also works with dollars: $ E = mc^2 $ and $$ \nabla \times \mathbf{B} = \mu_0 \mathbf{J} $$
+
+```html
+<p>HTML test</p>
+```</textarea>
+
+    <div id="html-output">
+      <!-- Preview will be rendered here -->
+    </div>
+  </div>
+
+  <!-- Main application logic using UMD globals -->
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      const markdownInput = document.getElementById('markdown-input');
+      const htmlOutput = document.getElementById('html-output');
+
+      // --- Crucial Checks ---
+      if (typeof window.markdownit !== 'function') {
+        htmlOutput.innerHTML = '<p style="color: red; font-weight: bold;">Error: markdown-it library failed to load. Check CDN link and network.</p>';
+        console.error("markdown-it is not loaded!");
+        return;
+      }
+      // Note: Check the actual global name exposed by the UMD plugin build
+      // It might be markdownitMathjax3 or something else. Inspect window object if unsure.
+      // Based on the file name 'markdown-it-mathjax3.umd.min.js', 'markdownitMathjax3' is likely.
+      if (typeof window.markdownitMathjax !== 'function') {
+        console.error("markdown-it-mathjax3 plugin not loaded or not a function. Actual value:", window.markdownitMathjax);
+        htmlOutput.innerHTML = '<p style="color: red; font-weight: bold;">Error: markdown-it-mathjax3 plugin failed to load. Check CDN link or global name.</p>';
+        return;
+      }
+
+      console.log("markdown-it and plugin appear loaded. Initializing...");
+      const md = window.markdownit({
+        html: true,
+        linkify: true,
+        typographer: true
+      }).use(window.markdownitMathjax); // Use the global plugin object
+
+      console.log("markdown-it initialized.");
+
+      // --- Rest of the code (debounce, update function, event listeners) ---
+      function debounce(func, wait) {
+        let timeout;
+        return function executedFunction(...args) {
+          const later = () => {
+            clearTimeout(timeout);
+            func(...args);
+          };
+          clearTimeout(timeout);
+          timeout = setTimeout(later, wait);
+        };
+      }
+
+      function updatePreview() {
+        try {
+          const markdownText = markdownInput.value.replace(/\\/ig, "\\\\");
+          const rawHtml = md.render(markdownText);
+          htmlOutput.innerHTML = rawHtml;
+
+          // Trigger MathJax typesetting
+          if (window.MathJax && window.MathJax.typesetPromise) {
+            MathJax.texReset();
+            MathJax.typesetClear([htmlOutput]);
+            window.MathJax.typesetPromise([htmlOutput])
+              .catch((err) => console.error('MathJax Typesetting Error:', err));
+          } else if (window.MathJax && window.MathJax.startup) {
+            window.MathJax.startup.promise.then(() => {
+              MathJax.texReset();
+              MathJax.typesetClear([htmlOutput]);
+              window.MathJax.typesetPromise([htmlOutput])
+                .catch((err) => console.error('MathJax Typesetting Error (startup):', err));
+            });
+          } else {
+            console.warn("MathJax not ready yet for typesetting.");
+          }
+        } catch (renderError) {
+          console.error("Error during Markdown rendering or MathJax typesetting:", renderError);
+          htmlOutput.innerHTML = `<p style="color: orange;">Error during rendering: ${renderError.message}</p>`;
+        }
+      }
+
+      const debouncedUpdatePreview = debounce(updatePreview, 250);
+      markdownInput.addEventListener('input', debouncedUpdatePreview);
+
+      console.log("Setting up initial preview...");
+      setTimeout(updatePreview, 150);
+
+    }); // End of DOMContentLoaded listener
+  </script>
+
+</body>
+
+</html>
