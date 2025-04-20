@@ -524,8 +524,45 @@ $$ \int_0^\infty e^{-x^2} dx = \frac{\sqrt{\pi}}{2} $$
       console.log("Setting up initial preview...");
       // Use a small delay to ensure MathJax has a chance to load, especially on slower connections
       // Although the typesetPromise logic should handle readiness checks.
+      // TODO: 这里不太对，有的时候好像会报错，我们应该找一个可以订阅是否 init 结束的地方
       setTimeout(updatePreview, 150);
 
+      /**
+       * 读取某个 query 参数 用于附加功能
+       * @param {string} key - 参数名称
+       * @param {function} callbackFn - 回调函数
+       */
+      function readQueryParam(key, callbackFn) {
+        const urlParams = new URLSearchParams(window.location.search);
+        const value = urlParams.get(key);
+        if (value !== null) {
+          callbackFn(value);
+        }
+      }
+
+      // 附加功能： 从 URL 参数中加载 Markdown Url
+      readQueryParam('mdUrl', (markdownUrl) => {
+        fetch(markdownUrl)
+          .then(response => response.text())
+          .then(markdownText => {
+            markdownInput.value = markdownText;
+            debouncedUpdatePreview();
+          })
+          .catch(error => {
+            console.error("Error fetching Markdown:", error);
+            alert("Error fetching Markdown: " + error);
+          });
+      });
+      // 附加功能： 从 URL 参数中加载 Markdown Text (base64编码)
+      readQueryParam('mdText', (markdownText) => {
+        try {
+          markdownInput.value = decodeURIComponent(atob(markdownText));
+        } catch (error) {
+          console.error("Error decoding Markdown:", error);
+          alert("Error decoding Markdown: " + error);
+        }
+        debouncedUpdatePreview();
+      });
     }); // End of DOMContentLoaded listener
   </script>
 
