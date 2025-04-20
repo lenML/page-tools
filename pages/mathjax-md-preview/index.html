@@ -526,7 +526,23 @@ $$ \int_0^\infty e^{-x^2} dx = \frac{\sqrt{\pi}}{2} $$
       // Use a small delay to ensure MathJax has a chance to load, especially on slower connections
       // Although the typesetPromise logic should handle readiness checks.
       // TODO: 这里不太对，有的时候好像会报错，我们应该找一个可以订阅是否 init 结束的地方
-      setTimeout(updatePreview, 150);
+      function init_update() {
+        // 因为 plugin 似乎是异步注册的...所以我们需要检测一下，如果渲染之后的 html 中不包含 `.MathJax` 元素，我们就再次 update ，最多试 5 次
+        // 也就是我们假设必须有 math jax 在 markdown 里
+        const is_init_ok = () => htmlOutput.querySelector('.MathJax');
+        let count = 0;
+        updatePreview();
+        const intervalId = setInterval(() => {
+          if (is_init_ok() || count > 5) {
+            clearInterval(intervalId);
+            console.log("Initial preview finished.");
+            return;
+          }
+          updatePreview();
+          count++;
+        }, 100);
+      }
+      setTimeout(init_update);
 
       /**
        * 读取某个 query 参数 用于附加功能
