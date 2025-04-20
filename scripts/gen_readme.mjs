@@ -54,3 +54,5 @@ const template = fs.readFileSync(TEMPLATE_PATH, "utf-8");
 const output = renderTemplate(template, { pages_table: pagesTable });
 
 fs.writeFileSync(OUTPUT_PATH, output);
+
+console.log(`README.md generated at ${OUTPUT_PATH}`);
