@@ -213,6 +213,11 @@
       /* Add space below summary */
     }
 
+    #html-output summary small {
+      font-size: 0.8em;
+      color: #999;
+    }
+
     /* Ensure first element inside details (after summary) has correct top margin */
     #html-output details>*:nth-child(2) {
       /* Selects first element after summary */
@@ -450,13 +455,54 @@ $$ \int_0^\infty e^{-x^2} dx = \frac{\sqrt{\pi}}{2} $$
         };
       }
 
+      function text_eclipse(text, max_length = 64) {
+        if (text.length <= max_length) {
+          return text;
+        }
+        const half_length = Math.floor(max_length / 2);
+        return (text.slice(0, half_length) + '...' + text.slice(-half_length))
+          // 需要去除 latex 语法，不然会被 math jax 再解析
+          .replace(/\\\]|\\\[|\\\(|\\\)|\$/ig, "");
+      }
+
+      /**
+       * 将所有第一层里面除了文本标准tag都转为 details
+       * @param {HTMLElement} container - 要转换的容器元素
+       */
+      function convert_monologue_to_details(container) {
+        // 将所有第一层里面除了文本标准tag都转为 details
+        const text_tags = "p, h1, h2, h3, h4, h5, h6, pre, ul, ol, details, blockquote, code, img, hr, a".split(", ");
+        const monologue_elems = [...container.children].filter(elem => !text_tags.includes(elem.localName));
+        monologue_elems.forEach(elem => {
+          const details = document.createElement('details');
+          const summary = document.createElement('summary');
+          summary.innerHTML = `[${elem.localName}] <small>${text_eclipse(elem.textContent ?? "")}</small>`; // Set the summary text
+
+          // Move all child nodes from <think> to <details>
+          while (elem.firstChild && elem.firstChild.tagName !== 'SUMMARY') {
+            details.appendChild(elem.firstChild);
+          }
+
+          // Add the summary as the first child of <details>
+          details.insertBefore(summary, details.firstChild);
+
+          // Replace the original <think> element with the new <details> element
+          elem.parentNode.replaceChild(details, elem);
+        });
+      }
+
       // --- Update Preview Function ---
       function updatePreview() {
         try {
           // 1. Render Markdown to HTML (keeping <think> tags)
           // Note: Backslash replacement is usually handled by markdown-it-mathjax correctly
           // if using $, $$, \(, \), \[, \]. Avoid double-escaping unless specific issues arise.
-          const markdownText = markdownInput.value.replace(/\\/ig, "\\\\")
+          const markdownText = markdownInput.value
+            .replace(/\\/ig, "\\\\")
+            .replace(/^\s*<[^>]+?>\s*$/igm, s => `\n${s}\n`)
+            // 将代码模块渲染为 code block
+            .replace(/<code>([\s\S]+?)<\/code>/ig, (_, s1) => `\`\`\`python\n${s1.trim()}\n\`\`\``)
+            .replace(/<execute>([\s\S]+?)<\/execute>/ig, (_, s1) => `\`\`\`python\n${s1.trim()}\n\`\`\``);
           // const markdownText = markdownInput.value;
           const rawHtml = md.render(markdownText);
 
@@ -464,24 +510,7 @@ $$ \int_0^\infty e^{-x^2} dx = \frac{\sqrt{\pi}}{2} $$
           const tempDiv = document.createElement('div');
           tempDiv.innerHTML = rawHtml; // Parse the rendered HTML
 
-          const thinkElements = tempDiv.querySelectorAll('think'); // Find all <think> elements
-
-          thinkElements.forEach(thinkElement => {
-            const details = document.createElement('details');
-            const summary = document.createElement('summary');
-            summary.textContent = 'Thinking Process'; // Set the summary text
-
-            // Move all child nodes from <think> to <details>
-            while (thinkElement.firstChild) {
-              details.appendChild(thinkElement.firstChild);
-            }
-
-            // Add the summary as the first child of <details>
-            details.insertBefore(summary, details.firstChild);
-
-            // Replace the original <think> element with the new <details> element
-            thinkElement.parentNode.replaceChild(details, thinkElement);
-          });
+          convert_monologue_to_details(tempDiv);
 
           // 3. Put the modified HTML into the output container
           htmlOutput.innerHTML = tempDiv.innerHTML;
