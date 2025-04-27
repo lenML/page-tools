@@ -503,7 +503,6 @@ $$ \int_0^\infty e^{-x^2} dx = \frac{\sqrt{\pi}}{2} $$
             // 将代码模块渲染为 code block
             .replace(/<code>([\s\S]+?)<\/code>/ig, (_, s1) => `\`\`\`python\n${s1.trim()}\n\`\`\``)
             .replace(/<execute>([\s\S]+?)<\/execute>/ig, (_, s1) => `\`\`\`python\n${s1.trim()}\n\`\`\``);
-          console.log(markdownText)
           // const markdownText = markdownInput.value;
           const rawHtml = md.render(markdownText);
 
