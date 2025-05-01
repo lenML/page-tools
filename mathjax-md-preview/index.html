@@ -471,7 +471,7 @@ $$ \int_0^\infty e^{-x^2} dx = \frac{\sqrt{\pi}}{2} $$
        */
       function convert_monologue_to_details(container) {
         // 将所有第一层里面除了文本标准tag都转为 details
-        const text_tags = "p, h1, h2, h3, h4, h5, h6, pre, ul, ol, details, blockquote, code, img, hr, a".split(", ");
+        const text_tags = "p, h1, h2, h3, h4, h5, h6, pre, ul, ol, details, blockquote, code, img, hr, a, table".split(", ");
         const monologue_elems = [...container.children].filter(elem => !text_tags.includes(elem.localName));
         monologue_elems.forEach(elem => {
           const details = document.createElement('details');
