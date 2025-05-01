@@ -164,6 +164,201 @@
       outline: none;
     }
 
+
+    #html-output {
+      flex: 1;
+      padding: 20px;
+      box-sizing: border-box;
+      overflow-y: auto;
+      background-color: #1e1e1e;
+    }
+
+    /* Dark Mode Styles */
+    #html-output h1,
+    #html-output h2,
+    #html-output h3,
+    #html-output h4,
+    #html-output h5,
+    #html-output h6 {
+      color: #569cd6;
+      border-bottom: 1px solid #444;
+      padding-bottom: 0.3em;
+      margin-top: 1.5em;
+      margin-bottom: 1em;
+    }
+
+    #html-output h1 {
+      font-size: 2em;
+    }
+
+    #html-output h2 {
+      font-size: 1.6em;
+    }
+
+    #html-output h3 {
+      font-size: 1.3em;
+    }
+
+    #html-output a {
+      color: #6a99ff;
+      text-decoration: none;
+    }
+
+    #html-output a:hover {
+      text-decoration: underline;
+    }
+
+    #html-output code {
+      background-color: #333;
+      padding: 0.2em 0.4em;
+      border-radius: 3px;
+      font-family: "Consolas", "Monaco", monospace;
+      font-size: 0.9em;
+      color: #ce9178;
+    }
+
+    #html-output pre {
+      background-color: #282828;
+      padding: 15px;
+      border-radius: 5px;
+      overflow-x: auto;
+      border: 1px solid #444;
+    }
+
+    #html-output pre code {
+      background-color: transparent;
+      padding: 0;
+      color: #d4d4d4;
+      font-size: 0.9em;
+    }
+
+    #html-output blockquote {
+      border-left: 4px solid #555;
+      padding-left: 15px;
+      margin-left: 0;
+      color: #aaa;
+    }
+
+    #html-output ul,
+    #html-output ol {
+      padding-left: 25px;
+    }
+
+    #html-output li {
+      margin-bottom: 0.5em;
+    }
+
+    #html-output table {
+      border-collapse: collapse;
+      margin: 1em 0;
+      width: auto;
+      border: 1px solid #555;
+    }
+
+    #html-output th,
+    #html-output td {
+      border: 1px solid #555;
+      padding: 8px 12px;
+    }
+
+    #html-output th {
+      background-color: #333;
+      font-weight: bold;
+    }
+
+    #html-output img {
+      max-width: 100%;
+      height: auto;
+      background-color: #fff;
+      /* Added for visibility of transparent images */
+      padding: 5px;
+      border-radius: 3px;
+      box-sizing: border-box;
+    }
+
+    /* Styles for the <details> element */
+    #html-output details {
+      border: 1px solid #444;
+      border-radius: 4px;
+      margin: 1em 0;
+      background-color: #2a2a2e;
+      /* Slightly different background */
+    }
+
+    #html-output details[open] {
+      background-color: #2f2f33;
+    }
+
+    #html-output summary {
+      padding: 10px 15px;
+      cursor: pointer;
+      font-weight: bold;
+      color: #a0cfff;
+      /* Lighter blue for summary */
+      background-color: #333;
+      /* Darker background for summary */
+      border-radius: 4px 4px 0 0;
+      /* Rounded corners only on top */
+      outline: none;
+      /* Remove default focus outline */
+      user-select: none;
+      /* Prevent text selection */
+      transition: background-color 0.2s ease;
+    }
+
+    #html-output details[open] summary {
+      border-bottom: 1px solid #444;
+      border-radius: 4px 4px 0 0;
+      /* Ensure corners remain rounded when open */
+    }
+
+    #html-output summary:hover {
+      background-color: #3e3e3e;
+    }
+
+    /* Content inside details */
+    #html-output details>*:not(summary) {
+      padding: 0 15px 15px 15px;
+      /* Padding only for content */
+      margin-top: 10px;
+      /* Add space below summary */
+    }
+
+    #html-output summary small {
+      font-size: 0.8em;
+      color: #999;
+    }
+
+    /* Ensure first element inside details (after summary) has correct top margin */
+    #html-output details>*:nth-child(2) {
+      /* Selects first element after summary */
+      margin-top: 10px !important;
+    }
+
+    /* Reset margin for elements directly inside details to avoid double margins */
+    #html-output details>p,
+    #html-output details>ul,
+    #html-output details>ol,
+    #html-output details>blockquote,
+    #html-output details>pre,
+    #html-output details>table,
+    #html-output details>h1,
+    #html-output details>h2,
+    #html-output details>h3,
+    #html-output details>h4,
+    #html-output details>h5,
+    #html-output details>h6 {
+      margin-left: 0;
+      margin-right: 0;
+    }
+
+    /* Adjust padding for nested blockquotes etc. if needed */
+    #html-output details blockquote {
+      margin-left: 0;
+      /* Reset blockquote margin inside details */
+    }
+
+
     #fileInput {
       display: none;
     }
@@ -280,7 +475,7 @@
       contentDiv.innerHTML = '';
       if (previewToggle.checked) {
         const previewArea = document.createElement('div');
-        previewArea.id = 'content-area';
+        previewArea.id = 'html-output';
         try {
           marked.setOptions({ gfm: true, breaks: false, sanitize: true }); // Disable breaks for better paragraph flow
           previewArea.innerHTML = marked.parse(rawMarkdown || '');
