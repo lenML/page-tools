@@ -44,7 +44,6 @@
         const segmenter = new Intl.Segmenter(lang, {
           granularity: mode === 'word' ? 'word' : 'sentence'
         });
-        console.log(Array.from(segmenter.segment(text)));
         return [...segmenter.segment(text)].map(seg => seg.segment);
       }
 
