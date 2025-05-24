@@ -39,6 +39,7 @@
     class DiffManager {
       static segmentText(text, mode = 'line') {
         if (mode === 'line') return text.split(/\n/);
+        if (mode === 'char') return text.split("");
         const lang = LangDetect.detect(text);
         const segmenter = new Intl.Segmenter(lang, {
           granularity: mode === 'word' ? 'word' : 'sentence'
@@ -170,6 +171,7 @@
           <option value="line">Line</option>
           <option value="sentence">Sentence</option>
           <option value="word">Word</option>
+          <option value="char">Char</option>
         </select>
         <span id="score" class="ml-auto text-sm text-gray-400"></span>
       </div>
