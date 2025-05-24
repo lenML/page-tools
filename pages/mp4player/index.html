@@ -1,0 +1,366 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MP4 Player</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22
+      font-size=%2290%22>📺</text></svg>" />
+  <script src="https://unpkg.com/feather-icons"></script>
+  <style>
+    /* Basic Reset & Dark Theme Globals */
+    html,
+    body {
+      height: 100%;
+      margin: 0;
+      padding: 0;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen,
+        Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+      background-color: #121212;
+      color: #e0e0e0;
+      overflow: hidden;
+      /* Prevent scrollbars from minor layout shifts */
+    }
+
+    #root {
+      display: flex;
+      flex-direction: column;
+      height: 100%;
+      position: relative;
+    }
+
+    /* Header Styles */
+    .app-header {
+      background-color: #1e1e1e;
+      padding: 15px 20px;
+      display: flex;
+      flex-direction: column;
+      /* Stack top row and controls row */
+      gap: 10px;
+      /* Space between top row and controls */
+      box-shadow: 0 2px 5px rgba(0, 0, 0, 0.3);
+      flex-shrink: 0;
+      z-index: 100;
+    }
+
+    .header-top-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      width: 100%;
+    }
+
+    .app-header .logo {
+      font-size: 1.5em;
+      font-weight: bold;
+      color: #bb86fc;
+    }
+
+    .header-actions {
+      display: flex;
+      align-items: center;
+      gap: 20px;
+    }
+
+    .app-header .github-link,
+    .app-header .history-toggle-btn {
+      color: #03dac6;
+      text-decoration: none;
+      font-size: 1em;
+      background: none;
+      border: none;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+
+    .app-header .github-link:hover,
+    .app-header .history-toggle-btn:hover {
+      text-decoration: underline;
+    }
+
+    .app-header .history-toggle-btn svg {
+      width: 20px;
+      height: 20px;
+      stroke-width: 2px;
+    }
+
+    .header-controls-row {
+      display: flex;
+      flex-direction: column;
+      /* Stack input and message */
+      gap: 8px;
+      width: 100%;
+      max-width: 800px;
+      /* Limit width of controls */
+      margin: 0 auto;
+      /* Center the controls row */
+    }
+
+    .controls-input-group {
+      display: flex;
+      gap: 10px;
+      width: 100%;
+    }
+
+    .controls-input-group input[type="text"] {
+      flex-grow: 1;
+      padding: 10px 12px;
+      /* Slightly smaller padding for header */
+      border: 1px solid #333;
+      border-radius: 6px;
+      background-color: #2c2c2c;
+      color: #e0e0e0;
+      font-size: 0.95em;
+    }
+
+    .controls-input-group input[type="text"]::placeholder {
+      color: #777;
+    }
+
+    .controls-input-group button {
+      padding: 10px 18px;
+      /* Slightly smaller padding */
+      background-color: #bb86fc;
+      color: #121212;
+      font-weight: bold;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 0.95em;
+      transition: background-color 0.2s ease;
+    }
+
+    .controls-input-group button:hover {
+      background-color: #a062f6;
+    }
+
+    .header-message {
+      /* Message styling specific to header */
+      padding: 8px 12px;
+      border-radius: 4px;
+      width: 100%;
+      box-sizing: border-box;
+      text-align: center;
+      font-size: 0.9em;
+      min-height: 1.2em;
+      /* Keep space even if empty for less layout shift */
+    }
+
+    .header-message.error {
+      background-color: #cf6679;
+      color: #121212;
+      border: 1px solid #cf6679;
+    }
+
+    .header-message.info {
+      background-color: #03dac6;
+      color: #121212;
+      border: 1px solid #03dac6;
+    }
+
+
+    /* Main App Content Area - Player and Drop Zone */
+    .app-content {
+      flex-grow: 1;
+      /* Take all remaining vertical space */
+      padding: 0;
+      /* Remove padding, player can go edge to edge if desired */
+      display: flex;
+      /* Use flex to center player/dropzone */
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      /* Center content vertically and horizontally */
+      position: relative;
+      /* For drop zone positioning */
+      overflow: hidden;
+      /* Player might handle its own scroll if any */
+    }
+
+    .player-area {
+      width: 100%;
+      height: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+      /* Context for drop zone overlay */
+    }
+
+    .player-container {
+      width: 100%;
+      height: 100%;
+      /* Fill the player-area */
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .player-wrapper {
+      /* This controls the aspect ratio for video content */
+      position: relative;
+      width: 100%;
+      /* Or max-width: 1280px; etc. */
+      max-height: 100%;
+      height: 100%;
+      /* Default 16:9 aspect ratio */
+      background-color: #000;
+      /* No border-radius if it's edge-to-edge */
+    }
+
+    .react-player {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100% !important;
+      /* Override inline styles from ReactPlayer if necessary */
+      height: 100% !important;
+    }
+
+    .drop-zone {
+      position: absolute;
+      /* Overlay on top of player area */
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      border: 3px dashed transparent;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      border-radius: 0;
+      /* No radius if edge-to-edge */
+      color: #aaa;
+      font-size: 1.2em;
+      pointer-events: none;
+      /* Allow clicks to pass through unless dragging */
+      transition: background-color 0.2s ease, border-color 0.2s ease, opacity 0.3s ease;
+      opacity: 0;
+      /* Hidden by default */
+      background-color: rgba(187, 134, 252, 0.1);
+      /* Slight bg tint for visibility */
+    }
+
+    .drop-zone.visible {
+      opacity: 1;
+      pointer-events: auto;
+      /* Enable drop when visible */
+    }
+
+    .drop-zone.dragging-over {
+      border-color: #bb86fc;
+      background-color: rgba(187, 134, 252, 0.25);
+      color: #bb86fc;
+    }
+
+    .drop-zone-text {
+      padding: 20px;
+    }
+
+    .no-video-placeholder {
+      /* This can be part of the drop-zone text or a separate element if needed */
+    }
+
+    /* History Sidebar Styles - Unchanged from previous */
+    .history-sidebar {
+      position: fixed;
+      top: 0;
+      right: -320px;
+      width: 300px;
+      height: 100%;
+      background-color: #1e1e1e;
+      box-shadow: -2px 0 5px rgba(0, 0, 0, 0.3);
+      padding: 20px;
+      padding-top: 60px;
+      /* Adjusted for potentially smaller header */
+      box-sizing: border-box;
+      overflow-y: auto;
+      z-index: 90;
+      transition: right 0.3s ease-in-out;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .history-sidebar.open {
+      right: 0;
+    }
+
+    .history-sidebar h3 {
+      margin-top: 0;
+      color: #bb86fc;
+      border-bottom: 1px solid #333;
+      padding-bottom: 10px;
+    }
+
+    .history-sidebar ul {
+      list-style: none;
+      padding: 0;
+      margin: 0;
+      flex-grow: 1;
+    }
+
+    .history-sidebar li {
+      padding: 10px 5px;
+      border-bottom: 1px solid #2c2c2c;
+      cursor: pointer;
+      font-size: 0.9em;
+      color: #ccc;
+      word-break: break-all;
+      transition: background-color 0.2s ease;
+    }
+
+    .history-sidebar li:hover {
+      background-color: #2c2c2c;
+      color: #03dac6;
+    }
+
+    .history-sidebar li .timestamp {
+      display: block;
+      font-size: 0.8em;
+      color: #777;
+      margin-top: 4px;
+    }
+
+    .history-sidebar .clear-history-btn {
+      margin-top: 15px;
+      padding: 10px;
+      background-color: #cf6679;
+      color: #121212;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      text-align: center;
+      font-weight: bold;
+      flex-shrink: 0;
+    }
+
+    .history-sidebar .clear-history-btn:hover {
+      background-color: #b84659;
+    }
+  </style>
+</head>
+
+<body>
+  <div id="root"></div>
+
+  <script type="importmap">
+    {
+        "imports": {
+            "react": "https://esm.sh/react@18.2.0?prod",
+            "react-dom/client": "https://esm.sh/react-dom@18.2.0/client?prod",
+            "react-player": "https://esm.sh/react-player@2.16.0?deps=react@18.2.0&prod"
+        }
+    }
+    </script>
+  <script src="https://unpkg.com/@babel/standalone@7.24.0/babel.min.js"></script>
+  <script type="text/babel" data-type="module" src="app.js"></script>
+  <script>
+    feather.replace();
+  </script>
+</body>
+
+</html>
