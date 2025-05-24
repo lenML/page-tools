@@ -10,12 +10,40 @@
   <script type="module">
     import { diffArrays } from 'https://esm.sh/diff@5.1.0';
 
+    class LangDetect {
+      static rules = [
+        { regex: /[\u4e00-\u9fff]/, lang: 'zh-Hans' },        // 简体中文
+        { regex: /[\u3100-\u312F\uB000-\uFAFF]/, lang: 'zh-Hant' }, // 繁体中文
+        { regex: /[а-яА-ЯёЁ]/, lang: 'ru' },                  // 俄语
+        { regex: /[ぁ-んァ-ン]/, lang: 'ja' },                // 日语
+        { regex: /[가-힣]/, lang: 'ko' },                      // 韩语
+        { regex: /[α-ωΑ-Ω]/, lang: 'el' },                    // 希腊语
+        { regex: /[a-zA-Z]/, lang: 'en' },                    // 英语（默认拉丁字符）
+        { regex: /[éèêàçôûîœ]/i, lang: 'fr' },                // 法语特征字符
+        { regex: /[äöüß]/i, lang: 'de' },                     // 德语特征字符
+        { regex: /[áéíóúñ]/i, lang: 'es' },                   // 西班牙语特征字符
+        { regex: /[àèìòù]/i, lang: 'it' },                    // 意大利语特征字符
+      ]
+
+      static detect(text) {
+        for (const rule of this.rules) {
+          if (rule.regex.test(text)) {
+            return rule.lang;
+          }
+        }
+        return 'und'; // 未识别
+      }
+    }
+
+
     class DiffManager {
       static segmentText(text, mode = 'line') {
         if (mode === 'line') return text.split(/\n/);
-        const segmenter = new Intl.Segmenter(undefined, {
-          type: mode === 'word' ? 'word' : 'sentence'
+        const lang = LangDetect.detect(text);
+        const segmenter = new Intl.Segmenter(lang, {
+          granularity: mode === 'word' ? 'word' : 'sentence'
         });
+        console.log(Array.from(segmenter.segment(text)));
         return [...segmenter.segment(text)].map(seg => seg.segment);
       }
 
