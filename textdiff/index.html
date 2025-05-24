@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+
+<head>
+  <meta charset="UTF-8">
+  <title>Text Diff Tool</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22
+      font-size=%2290%22>📝</text></svg>" />
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script type="module">
+    import { diffArrays } from 'https://esm.sh/diff@5.1.0';
+
+    class DiffManager {
+      static segmentText(text, mode = 'line') {
+        if (mode === 'line') return text.split(/\n/);
+        const segmenter = new Intl.Segmenter(undefined, {
+          type: mode === 'word' ? 'word' : 'sentence'
+        });
+        return [...segmenter.segment(text)].map(seg => seg.segment);
+      }
+
+      static generate(oldText, newText, mode = 'line') {
+        const oldSegments = this.segmentText(oldText, mode);
+        const newSegments = this.segmentText(newText, mode);
+        return diffArrays(oldSegments, newSegments);
+      }
+
+      static score(diff) {
+        let total = 0, changed = 0;
+        diff.forEach(part => {
+          const len = part.value.length;
+          total += len;
+          if (part.added || part.removed) changed += len;
+        });
+        return total === 0 ? 0 : Math.round((changed / total) * 100);
+      }
+    }
+
+    class HistoryManager {
+      static key = 'text-diff-history';
+
+      static load() {
+        return JSON.parse(localStorage.getItem(this.key) || '[]');
+      }
+
+      static save(entry) {
+        let history = this.load();
+        const isDuplicate = history.some(h => h.oldText === entry.oldText && h.newText === entry.newText && h.mode === entry.mode);
+        if (isDuplicate) return;
+        history.unshift(entry);
+        if (history.length > 100) history = history.slice(0, 100);
+        localStorage.setItem(this.key, JSON.stringify(history));
+        this.render();
+      }
+
+      static clear() {
+        localStorage.removeItem(this.key);
+        this.render();
+      }
+
+      static delete(index) {
+        const history = this.load();
+        history.splice(index, 1);
+        localStorage.setItem(this.key, JSON.stringify(history));
+        this.render();
+      }
+
+      static render() {
+        const history = this.load();
+        const list = document.getElementById('historyList');
+        list.innerHTML = '';
+        history.forEach((entry, index) => {
+          const item = document.createElement('div');
+          item.className = 'flex items-center justify-between gap-2';
+          const btn = document.createElement('button');
+          btn.className = 'flex-1 text-left p-2 hover:bg-gray-700';
+          btn.textContent = `#${index + 1} - ${entry.timestamp} [${entry.mode}] (${entry.score}%)`;
+          btn.addEventListener('click', () => {
+            document.getElementById('oldText').value = entry.oldText;
+            document.getElementById('newText').value = entry.newText;
+            document.getElementById('mode').value = entry.mode;
+          });
+          const del = document.createElement('button');
+          del.className = 'text-red-400 hover:text-red-200';
+          del.textContent = '✕';
+          del.onclick = () => this.delete(index);
+          item.append(btn, del);
+          list.appendChild(item);
+        });
+      }
+    }
+
+    function renderDiff(diff, mode) {
+      const container = document.getElementById('result');
+      container.innerHTML = '';
+      diff.forEach(part => {
+        const span = document.createElement('span');
+        span.textContent = part.value.join(mode === 'line' ? '\n' : '');
+        span.className = part.added ? 'bg-green-800/40 text-green-300' : part.removed ? 'bg-red-800/40 text-red-300' : '';
+        container.appendChild(span);
+      });
+    }
+
+    document.getElementById('diffBtn').addEventListener('click', () => {
+      const oldText = document.getElementById('oldText').value;
+      const newText = document.getElementById('newText').value;
+      const mode = document.getElementById('mode').value;
+      const diff = DiffManager.generate(oldText, newText, mode);
+      const score = DiffManager.score(diff);
+      renderDiff(diff, mode);
+      document.getElementById('score').textContent = `Diff Score: ${score}%`;
+
+      HistoryManager.save({ oldText, newText, mode, score, timestamp: new Date().toLocaleString() });
+    });
+
+    document.getElementById('clearHistoryBtn').addEventListener('click', () => HistoryManager.clear());
+
+    document.addEventListener('DOMContentLoaded', () => HistoryManager.render());
+  </script>
+</head>
+
+<body class="bg-[#1e1e1e] text-gray-200 min-h-screen flex flex-col">
+  <header class="flex justify-between items-center px-6 py-4 bg-[#333333] shadow">
+    <h1 class="text-2xl font-bold">Text Diff Tool</h1>
+    <a href="https://github.com/lenml/page-tools/tree/main/pages/textdiff" target="_blank"
+      class="text-blue-400 hover:text-blue-300">GitHub</a>
+  </header>
+
+  <main class="flex flex-1">
+    <aside class="w-72 bg-[#252526] text-sm p-4 border-r border-gray-700 overflow-y-auto">
+      <div class="flex justify-between items-center mb-2">
+        <h2 class="text-lg font-bold">History</h2>
+        <button id="clearHistoryBtn" class="text-red-400 hover:text-red-200 text-sm">Clear</button>
+      </div>
+      <div id="historyList" class="space-y-1"></div>
+    </aside>
+
+    <div class="flex-1 flex flex-col p-6">
+      <div class="mb-4 flex items-center gap-4">
+        <label for="mode">Diff mode:</label>
+        <select id="mode" class="bg-gray-800 text-white p-2 rounded">
+          <option value="line">Line</option>
+          <option value="sentence">Sentence</option>
+          <option value="word">Word</option>
+        </select>
+        <span id="score" class="ml-auto text-sm text-gray-400"></span>
+      </div>
+
+      <div class="flex gap-4 mb-4">
+        <textarea id="oldText" class="w-1/2 h-64 p-2 bg-gray-800 text-white border border-gray-600 rounded"
+          placeholder="Old text..."></textarea>
+        <textarea id="newText" class="w-1/2 h-64 p-2 bg-gray-800 text-white border border-gray-600 rounded"
+          placeholder="New text..."></textarea>
+      </div>
+
+      <button id="diffBtn" class="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded">Generate Diff</button>
+      <div id="result" class="mt-6 p-4 bg-gray-800 border border-gray-700 rounded whitespace-pre-wrap"></div>
+    </div>
+  </main>
+</body>
+
+</html>
