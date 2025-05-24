@@ -107,6 +107,8 @@
             document.getElementById('oldText').value = entry.oldText;
             document.getElementById('newText').value = entry.newText;
             document.getElementById('mode').value = entry.mode;
+
+            setTimeout(doDiff)
           });
           const del = document.createElement('button');
           del.className = 'text-red-400 hover:text-red-200';
@@ -129,7 +131,7 @@
       });
     }
 
-    document.getElementById('diffBtn').addEventListener('click', () => {
+    function doDiff() {
       const oldText = document.getElementById('oldText').value;
       const newText = document.getElementById('newText').value;
       const mode = document.getElementById('mode').value;
@@ -139,7 +141,9 @@
       document.getElementById('score').textContent = `Diff Score: ${score}%`;
 
       HistoryManager.save({ oldText, newText, mode, score, timestamp: new Date().toLocaleString() });
-    });
+    }
+
+    document.getElementById('diffBtn').addEventListener('click', doDiff);
 
     document.getElementById('clearHistoryBtn').addEventListener('click', () => HistoryManager.clear());
 
