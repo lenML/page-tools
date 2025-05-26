@@ -1,0 +1,495 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>UV IR 估算</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/suncalc/1.8.0/suncalc.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/date-fns@2.29.3/esm/index.js" type="module"></script>
+  <script
+    src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@2.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
+  <script
+    src="https://cdnjs.cloudflare.com/ajax/libs/chartjs-plugin-annotation/1.4.0/chartjs-plugin-annotation.min.js"></script>
+
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+      background-color: #1e1e1e;
+      color: #e0e0e0;
+      margin: 0;
+      height: 100vh;
+      overflow: hidden;
+      /* Prevent body scrollbar */
+      display: flex;
+      justify-content: center;
+      /* Center .page-content if max-width is less than screen */
+    }
+
+    .page-content {
+      width: 100%;
+      max-width: 1300px;
+      /* Max width for the entire app content */
+      height: 100vh;
+      padding: 15px;
+      box-sizing: border-box;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .header-area {
+      text-align: center;
+      flex-shrink: 0;
+      /* Prevent shrinking */
+      margin-bottom: 10px;
+    }
+
+    .header-area h1 {
+      color: #bb86fc;
+      margin-top: 0;
+      margin-bottom: 10px;
+      font-size: 1.7em;
+    }
+
+    .header-area button {
+      background-color: #bb86fc;
+      color: #1e1e1e;
+      border: none;
+      padding: 10px 20px;
+      font-size: 0.95em;
+      border-radius: 5px;
+      cursor: pointer;
+      transition: background-color 0.3s ease;
+      margin-bottom: 10px;
+    }
+
+    .header-area button:hover {
+      background-color: #a06cd5;
+    }
+
+    .header-area button:disabled {
+      background-color: #555;
+      color: #888;
+      cursor: not-allowed;
+    }
+
+    .loader {
+      border: 4px solid #f3f3f330;
+      border-top: 4px solid #bb86fc;
+      border-radius: 50%;
+      width: 24px;
+      height: 24px;
+      animation: spin 1s linear infinite;
+      margin: 5px auto;
+      display: none;
+    }
+
+    #status {
+      padding: 8px;
+      background-color: #3a3a3a;
+      border-radius: 5px;
+      color: #ffcc00;
+      font-size: 0.85em;
+      margin-top: 5px;
+    }
+
+    .main-content-area {
+      display: flex;
+      flex-grow: 1;
+      /* Take remaining vertical space */
+      overflow: hidden;
+      /* Prevent this area from causing page scroll */
+      width: 100%;
+    }
+
+    .info-column {
+      flex: 0 0 300px;
+      /* Fixed width for info column */
+      padding-right: 15px;
+      box-sizing: border-box;
+      overflow-y: auto;
+      /* Scroll within info column if content overflows */
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      /* Space between info blocks */
+      background-color: #2c2c2c;
+      padding: 15px;
+      border-radius: 8px;
+    }
+
+    #realtime-info,
+    #walk-time-info {
+      padding: 10px;
+      background-color: #3a3a3a;
+      border-radius: 5px;
+      font-size: 0.9em;
+    }
+
+    #realtime-info p,
+    #walk-time-info p {
+      margin: 0 0 5px 0;
+      line-height: 1.5;
+    }
+
+    #realtime-info p:last-child,
+    #walk-time-info p:last-child {
+      margin-bottom: 0;
+    }
+
+
+    .info-notice {
+      font-size: 0.75em;
+      color: #aaa;
+      padding: 10px;
+      border: 1px dashed #555;
+      border-radius: 5px;
+      text-align: left;
+      background-color: #333;
+      margin-top: auto;
+      /* Push notice to bottom if space allows */
+    }
+
+    .info-notice ul {
+      padding-left: 18px;
+      margin: 5px 0;
+    }
+
+    .info-notice li {
+      margin-bottom: 3px;
+    }
+
+    .chart-column {
+      flex: 1;
+      /* Take remaining horizontal space */
+      display: flex;
+      flex-direction: column;
+      /* Ensure chart container can grow */
+      min-width: 0;
+      /* Important for flex item to shrink if needed */
+    }
+
+    #radiationChartContainer {
+      width: 100%;
+      flex-grow: 1;
+      /* Chart container fills chart column's height */
+      background-color: #333;
+      border-radius: 8px;
+      padding: 10px;
+      box-sizing: border-box;
+      display: flex;
+      /* Helps canvas behave with Chart.js responsive */
+      min-height: 250px;
+      /* Minimum sensible height for the chart */
+    }
+
+    #radiationChart {
+      display: block;
+      /* Default for canvas, but good to ensure */
+      width: 100% !important;
+      /* Override any inline Chart.js styles if needed */
+      height: 100% !important;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="page-content">
+    <div class="header-area">
+      <h1>
+        UV IR 估算
+        <button id="calculateBtn">刷新</button>
+      </h1>
+      <div class="loader" id="loader"></div>
+      <div id="status"></div>
+    </div>
+
+    <div class="main-content-area" style="display:none;">
+      <div class="info-column">
+        <div id="realtime-info" style="display:none;">
+          <p><strong>当前估算值 (每分钟更新):</strong></p>
+          <p>相对紫外线 (UV) 强度: <span id="current-uv">---</span></p>
+          <p>相对红外线 (IR) 强度: <span id="current-ir">---</span></p>
+          <p>红外线分数 (IR / (IR+UV)): <span id="current-ir-fraction">---</span></p>
+          <p>红外线加权强度 (分数 * IR): <span id="current-ir-weighted">---</span></p>
+        </div>
+
+        <div id="walk-time-info" style="display:none;">
+          <p><strong>估算最佳散步时间 (低UV, 较高IR):</strong></p>
+          <p>上午: <span id="best-morning-walk">---</span></p>
+          <p>傍晚: <span id="best-evening-walk">---</span></p>
+        </div>
+
+        <div class="info-notice">
+          <p><strong>请注意：</strong></p>
+          <ul>
+            <li>本工具数据基于太阳高度角进行理论估算，未考虑实际大气因素。</li>
+            <li>“红光”（可见光）与“红外线”（热辐射）是不同概念。</li>
+            <li>所有强度值和分数均在0到1之间（或0%到100%）。</li>
+            <li>“红外线分数” = IR / (IR + UV)。</li>
+            <li>“红外线加权强度” = 红外线分数 * 红外线强度。</li>
+            <li>“最佳散步时间”基于UV < 10% 且 IR> 20% 的时段中IR最强的时刻估算。</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="chart-column">
+        <div id="radiationChartContainer" style="display:none;">
+          <canvas id="radiationChart"></canvas>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script type="module">
+    // For chartjs-adapter-date-fns
+  </script>
+  <script>
+    const calculateBtn = document.getElementById('calculateBtn');
+    const statusDiv = document.getElementById('status');
+    const loader = document.getElementById('loader');
+
+    const mainContentArea = document.querySelector('.main-content-area');
+    const realtimeInfoDiv = document.getElementById('realtime-info');
+    const walkTimeInfoDiv = document.getElementById('walk-time-info');
+    const radiationChartContainer = document.getElementById('radiationChartContainer');
+
+    const currentUVspan = document.getElementById('current-uv');
+    const currentIRspan = document.getElementById('current-ir');
+    const currentIRFractionSpan = document.getElementById('current-ir-fraction');
+    const currentIRWeightedSpan = document.getElementById('current-ir-weighted');
+
+    const bestMorningWalkSpan = document.getElementById('best-morning-walk');
+    const bestEveningWalkSpan = document.getElementById('best-evening-walk');
+    const chartCanvas = document.getElementById('radiationChart');
+
+    let radiationChartInstance = null;
+    let locationData = null;
+    let updateInterval = null;
+
+    Chart.defaults.color = '#e0e0e0';
+    Chart.defaults.borderColor = '#444';
+
+    calculateBtn.addEventListener('click', getUserLocationAndInit);
+
+    function showLoader(show) {
+      loader.style.display = show ? 'block' : 'none';
+    }
+
+    function getUserLocationAndInit() {
+      showLoader(true);
+      calculateBtn.disabled = true;
+      statusDiv.textContent = '正在获取您的位置...';
+
+      mainContentArea.style.display = 'none'; // Hide main content area
+      realtimeInfoDiv.style.display = 'none';
+      walkTimeInfoDiv.style.display = 'none';
+      radiationChartContainer.style.display = 'none';
+
+      if (radiationChartInstance) {
+        radiationChartInstance.destroy();
+        radiationChartInstance = null;
+      }
+      if (updateInterval) {
+        clearInterval(updateInterval);
+        updateInterval = null;
+      }
+
+      if (!navigator.geolocation) {
+        statusDiv.textContent = '抱歉，您的浏览器不支持地理位置服务。';
+        showLoader(false);
+        calculateBtn.disabled = false;
+        return;
+      }
+
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          locationData = {
+            lat: position.coords.latitude,
+            lon: position.coords.longitude
+          };
+          statusDiv.textContent = `获取到位置：纬度 ${locationData.lat.toFixed(4)}, 经度 ${locationData.lon.toFixed(4)}. 正在计算...`;
+          initRadiationTool(locationData.lat, locationData.lon);
+        },
+        (error) => {
+          statusDiv.textContent = `获取位置失败：${error.message}。请确保已授权位置访问。`;
+          showLoader(false);
+          calculateBtn.disabled = false;
+        }
+      );
+    }
+
+    setTimeout(getUserLocationAndInit)
+
+    function initRadiationTool(lat, lon) {
+      const today = new Date();
+      const dailyRadiationData = calculateDailyRadiationProfile(lat, lon, today);
+
+      if (dailyRadiationData.length === 0) {
+        statusDiv.textContent += '\n无法计算有效的辐射数据。';
+        showLoader(false);
+        calculateBtn.disabled = false;
+        return;
+      }
+
+      const sunTimes = SunCalc.getTimes(today, lat, lon);
+      const walkTimes = calculateOptimalWalkTimes(dailyRadiationData, sunTimes);
+
+      drawRadiationChart(dailyRadiationData, today, walkTimes); // Pass walkTimes
+      startRealtimeUpdates(lat, lon);
+
+      bestMorningWalkSpan.textContent = walkTimes.morning ? formatTime(walkTimes.morning) : '无合适时段';
+      bestEveningWalkSpan.textContent = walkTimes.evening ? formatTime(walkTimes.evening) : '无合适时段';
+
+      statusDiv.textContent = '数据加载完毕。';
+      showLoader(false);
+      calculateBtn.disabled = false;
+
+      mainContentArea.style.display = 'flex'; // Show main content area
+      realtimeInfoDiv.style.display = 'block';
+      walkTimeInfoDiv.style.display = 'block';
+      radiationChartContainer.style.display = 'flex'; // Important for canvas sizing
+    }
+
+    function formatTime(date) {
+      if (!date) return '---';
+      return date.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false });
+    }
+
+    function getRelativeUV(altitudeRad) {
+      if (altitudeRad <= 0) return 0;
+      return Math.pow(Math.sin(altitudeRad), 4);
+    }
+
+    function getRelativeIR(altitudeRad) {
+      if (altitudeRad <= 0) return 0;
+      return Math.sin(altitudeRad);
+    }
+
+    function calculateDailyRadiationProfile(lat, lon, date) {
+      const profile = [];
+      const startOfDay = new Date(date);
+      startOfDay.setHours(0, 0, 0, 0);
+
+      for (let i = 0; i < 24 * 4; i++) { // Every 15 minutes
+        const currentTime = new Date(startOfDay.getTime() + i * 15 * 60 * 1000);
+        const sunPos = SunCalc.getPosition(currentTime, lat, lon);
+        const uv = getRelativeUV(sunPos.altitude);
+        const ir = getRelativeIR(sunPos.altitude);
+        let irFraction = 0;
+        if (ir + uv > 0.00001) { irFraction = ir / (ir + uv); }
+        const irWeighted = irFraction * ir;
+        profile.push({ time: currentTime, uv, ir, irFraction, irWeighted });
+      }
+      return profile;
+    }
+
+    function calculateOptimalWalkTimes(dailyRadiationData, sunTimes) {
+      const MAX_UV_WALK = 0.10;
+      const MIN_IR_WALK = 0.20;
+      let morningCandidates = [];
+      let eveningCandidates = [];
+
+      dailyRadiationData.forEach(point => {
+        if (point.uv < MAX_UV_WALK && point.ir > MIN_IR_WALK) {
+          if (point.time > sunTimes.sunrise && point.time < sunTimes.solarNoon) {
+            morningCandidates.push(point);
+          } else if (point.time > sunTimes.solarNoon && point.time < sunTimes.sunset) {
+            eveningCandidates.push(point);
+          }
+        }
+      });
+      let bestMorningTime = morningCandidates.length > 0 ? morningCandidates.reduce((best, current) => (current.ir > best.ir ? current : best), morningCandidates[0]).time : null;
+      let bestEveningTime = eveningCandidates.length > 0 ? eveningCandidates.reduce((best, current) => (current.ir > best.ir ? current : best), eveningCandidates[0]).time : null;
+      return { morning: bestMorningTime, evening: bestEveningTime };
+    }
+
+    function drawRadiationChart(dailyData, date, walkTimes) { // Added walkTimes parameter
+      if (radiationChartInstance) {
+        radiationChartInstance.destroy();
+      }
+      const ctx = chartCanvas.getContext('2d');
+      const labels = dailyData.map(d => d.time);
+      const uvData = dailyData.map(d => d.uv);
+      const irData = dailyData.map(d => d.ir);
+      const irFractionData = dailyData.map(d => d.irFraction);
+      const irWeightedData = dailyData.map(d => d.irWeighted);
+
+      const dynamicAnnotations = {
+        currentTimeLine: {
+          type: 'line', scaleID: 'x', value: new Date(), borderColor: '#bb86fc', borderWidth: 2, borderDash: [6, 6],
+          label: { enabled: true, content: '现在', position: 'start', backgroundColor: 'rgba(187, 134, 252, 0.8)', color: '#1e1e1e', font: { weight: 'bold' } }
+        }
+      };
+
+      if (walkTimes && walkTimes.morning) {
+        dynamicAnnotations.morningWalkLine = {
+          type: 'line', scaleID: 'x', value: walkTimes.morning, borderColor: 'rgba(0, 255, 127, 0.7)', borderWidth: 2, borderDash: [4, 4],
+          label: { enabled: true, content: '上午推荐', position: 'end', yAdjust: -15, backgroundColor: 'rgba(0, 255, 127, 0.7)', color: '#1e1e1e', font: { style: 'italic' } }
+        };
+      }
+      if (walkTimes && walkTimes.evening) {
+        dynamicAnnotations.eveningWalkLine = {
+          type: 'line', scaleID: 'x', value: walkTimes.evening, borderColor: 'rgba(255, 165, 0, 0.7)', borderWidth: 2, borderDash: [4, 4],
+          label: { enabled: true, content: '傍晚推荐', position: 'end', yAdjust: 15, backgroundColor: 'rgba(255, 165, 0, 0.7)', color: '#1e1e1e', font: { style: 'italic' } }
+        };
+      }
+
+      radiationChartInstance = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels: labels,
+          datasets: [
+            { label: '相对紫外线 (UV) 强度', data: uvData, borderColor: 'rgb(138, 43, 226)', backgroundColor: 'rgba(138, 43, 226, 0.1)', tension: 0.3, fill: true, pointRadius: 0, yAxisID: 'yIntensity' },
+            { label: '相对红外线 (IR) 强度', data: irData, borderColor: 'rgb(255, 69, 0)', backgroundColor: 'rgba(255, 69, 0, 0.1)', tension: 0.3, fill: true, pointRadius: 0, yAxisID: 'yIntensity' },
+            { label: '红外线分数 (IR/(IR+UV))', data: irFractionData, borderColor: 'rgb(60, 179, 113)', backgroundColor: 'rgba(60, 179, 113, 0.1)', tension: 0.3, fill: false, pointRadius: 1, borderDash: [5, 5], yAxisID: 'yIntensity' },
+            { label: '红外线加权强度 (分数*IR)', data: irWeightedData, borderColor: 'rgb(255, 215, 0)', backgroundColor: 'rgba(255, 215, 0, 0.1)', tension: 0.3, fill: false, pointRadius: 1, borderDash: [2, 2], yAxisID: 'yIntensity' }
+          ]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          interaction: { mode: 'index', intersect: false },
+          scales: {
+            x: { type: 'time', time: { unit: 'hour', displayFormats: { hour: 'HH:mm' }, tooltipFormat: 'HH:mm' }, title: { display: true, text: `时间 (${date.toLocaleDateString()})` }, grid: { color: '#555' }, ticks: { color: '#ccc', maxRotation: 0, autoSkipPadding: 20, font: { size: 10 } } },
+            yIntensity: { type: 'linear', position: 'left', beginAtZero: true, max: 1, title: { display: true, text: '相对强度/分数' }, grid: { color: '#555' }, ticks: { color: '#ccc', callback: function (value) { return (value * 100).toFixed(0) + '%'; }, font: { size: 10 } } }
+          },
+          plugins: {
+            tooltip: { callbacks: { label: function (context) { let label = context.dataset.label || ''; if (label) { label += ': '; } if (context.parsed.y !== null) { label += (context.parsed.y * 100).toFixed(1) + '%'; } return label; } } },
+            legend: { labels: { color: '#e0e0e0', boxWidth: 15, padding: 10, font: { size: 10 } }, position: 'top' },
+            annotation: { annotations: dynamicAnnotations }
+          }
+        }
+      });
+    }
+
+    function updateRealtimeDisplay(lat, lon) {
+      const now = new Date();
+      const sunPos = SunCalc.getPosition(now, lat, lon);
+      const currentUV = getRelativeUV(sunPos.altitude);
+      const currentIR = getRelativeIR(sunPos.altitude);
+      let irFraction = 0;
+      if (currentIR + currentUV > 0.00001) { irFraction = currentIR / (currentIR + currentUV); }
+      const currentIRWeighted = irFraction * currentIR;
+
+      currentUVspan.textContent = (currentUV * 100).toFixed(1) + '%';
+      currentIRspan.textContent = (currentIR * 100).toFixed(1) + '%';
+      currentIRFractionSpan.textContent = (irFraction * 100).toFixed(1) + '%';
+      currentIRWeightedSpan.textContent = (currentIRWeighted * 100).toFixed(1) + '%';
+
+      if (radiationChartInstance && radiationChartInstance.options.plugins.annotation) {
+        radiationChartInstance.options.plugins.annotation.annotations.currentTimeLine.value = now;
+        radiationChartInstance.update('none');
+      }
+    }
+
+    function startRealtimeUpdates(lat, lon) {
+      if (updateInterval) { clearInterval(updateInterval); }
+      updateRealtimeDisplay(lat, lon);
+      updateInterval = setInterval(() => { updateRealtimeDisplay(lat, lon); }, 60 * 1000);
+    }
+  </script>
+</body>
+
+</html>

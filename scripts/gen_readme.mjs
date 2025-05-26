@@ -8,7 +8,9 @@ import path from "path";
 function extractTitleFromHtml(filePath) {
   if (!fs.existsSync(filePath)) return null;
   const content = fs.readFileSync(filePath, "utf-8");
-  const match = content.match(/<title>(.*?)<\/title>/i);
+  const match =
+    content.match(/<title>(.*?)<\/title>/i) ||
+    content.match(/^\s*?#\s?(.+?)\s*?\n/i);
   return match ? match[1].trim() : null;
 }
 
@@ -35,9 +37,10 @@ const subdirs = fs
 const tableRows = subdirs.map((dir) => {
   const dirPath = path.join(ROOT, dir);
   const indexHtml = path.join(dirPath, "index.html");
-  const readmeHtml = path.join(dirPath, "readme");
+  const readmeHtml = path.join(dirPath, "readme.md");
   const title =
-    extractTitleFromHtml(indexHtml) || extractTitleFromHtml(readmeHtml) || dir;
+    extractTitleFromHtml(readmeHtml) || extractTitleFromHtml(indexHtml) || dir;
+  console.log(title);
 
   const siteLink = `${SITE_BASE_URL}/${dir}`;
   const codeLink = `${CODE_BASE_URL}/${dir}`;
