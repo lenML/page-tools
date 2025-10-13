@@ -1,0 +1,502 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>🌌 3D 图像透视渲染器</title>
+  <style>
+    :root {
+      --bg: #0d0d0f;
+      --card-bg: #1b1c20;
+      --border: #2b2d31;
+      --text: #e4e6eb;
+      --text-dim: #9a9a9a;
+      --accent: #3b82f6;
+      --accent-hover: #60a5fa;
+    }
+
+    body {
+      margin: 0;
+      font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* Header */
+    .header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 15px 25px;
+      border-bottom: 1px solid var(--border);
+      background: rgba(20, 20, 25, 0.8);
+      backdrop-filter: blur(10px);
+      z-index: 10;
+    }
+
+    .header h1 {
+      margin: 0;
+      font-size: 1.2rem;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 0.4em;
+    }
+
+    .header a {
+      color: var(--text-dim);
+      text-decoration: none;
+      font-size: 0.95rem;
+      transition: color 0.2s;
+    }
+
+    .header a:hover {
+      color: var(--accent-hover);
+    }
+
+    /* Views */
+    .view {
+      flex: 1;
+      display: none;
+      transition: opacity 0.3s ease;
+      opacity: 0;
+    }
+
+    .view.active {
+      display: flex;
+      opacity: 1;
+    }
+
+    /* Upload View */
+    .upload-view {
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 30px;
+    }
+
+    .drop-zone-container {
+      display: flex;
+      gap: 25px;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+
+    .drop-zone {
+      width: 260px;
+      height: 260px;
+      border: 2px dashed var(--border);
+      border-radius: 12px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      cursor: pointer;
+      position: relative;
+      background: var(--card-bg);
+      transition: border-color 0.25s, transform 0.25s;
+    }
+
+    .drop-zone:hover {
+      border-color: var(--accent);
+      transform: translateY(-3px);
+    }
+
+    .drop-zone h3 {
+      margin: 0;
+      font-size: 1rem;
+      color: var(--text);
+    }
+
+    .drop-zone p {
+      margin: 5px 0 0 0;
+      font-size: 0.85rem;
+      color: var(--text-dim);
+    }
+
+    .drop-zone input[type="file"] {
+      display: none;
+    }
+
+    .drop-zone img {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      border-radius: 10px;
+      z-index: 1;
+      opacity: 0.85;
+    }
+
+    .drop-zone .overlay {
+      z-index: 2;
+      background: rgba(0, 0, 0, 0.4);
+      padding: 10px;
+      border-radius: 8px;
+      transition: opacity 0.3s;
+    }
+
+    .drop-zone.has-image .overlay {
+      opacity: 0;
+    }
+
+    .drop-zone.has-image:hover .overlay {
+      opacity: 1;
+    }
+
+    /* Buttons */
+    .btn {
+      background: var(--accent);
+      color: white;
+      padding: 10px 20px;
+      border-radius: 8px;
+      border: none;
+      cursor: pointer;
+      font-size: 1rem;
+      transition: background 0.2s, transform 0.2s;
+    }
+
+    .btn:hover {
+      background: var(--accent-hover);
+      transform: translateY(-2px);
+    }
+
+    /* Render View */
+    .render-view {
+      position: relative;
+      flex-direction: column;
+    }
+
+    #canvas-container {
+      flex: 1;
+      position: relative;
+      background: #111;
+    }
+
+    #controls {
+      position: absolute;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(30, 30, 35, 0.8);
+      padding: 10px 20px;
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      gap: 15px;
+      color: #fff;
+      backdrop-filter: blur(6px);
+    }
+
+    #controls label {
+      font-size: 0.9em;
+      color: #ccc;
+    }
+
+    #controls input[type="range"] {
+      width: 150px;
+    }
+
+    .back-btn {
+      position: absolute;
+      top: 20px;
+      left: 20px;
+      background: rgba(40, 40, 45, 0.8);
+      color: white;
+      padding: 8px 14px;
+      border-radius: 8px;
+      cursor: pointer;
+      border: none;
+      transition: background 0.2s;
+    }
+
+    .back-btn:hover {
+      background: rgba(60, 60, 70, 0.8);
+    }
+
+    #canvas-placeholder {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      color: #777;
+      font-size: 1.1rem;
+      text-align: center;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="header">
+    <h1>🌌 3D 图像透视渲染器</h1>
+    <a href="https://github.com/lenML/page-tools" target="_blank">GitHub ↗</a>
+  </div>
+
+  <!-- 上传视图 -->
+  <div id="upload-view" class="view upload-view active">
+    <div class="drop-zone-container">
+      <div class="drop-zone" id="original-drop-zone">
+        <div class="overlay">
+          <h3>原图 (Color)</h3>
+          <p>拖拽 / 点击 / 粘贴上传</p>
+        </div>
+        <input type="file" id="original-input" accept="image/*">
+        <img id="original-preview" src="" alt="Original Preview">
+      </div>
+
+      <div class="drop-zone" id="depth-drop-zone">
+        <div class="overlay">
+          <h3>深度图 (Depth)</h3>
+          <p>拖拽 / 点击 / 粘贴上传</p>
+        </div>
+        <input type="file" id="depth-input" accept="image/*">
+        <img id="depth-preview" src="" alt="Depth Preview">
+      </div>
+    </div>
+
+    <button id="render-btn" class="btn" disabled>开始渲染</button>
+  </div>
+
+  <!-- 渲染视图 -->
+  <div id="render-view" class="view render-view">
+    <button class="back-btn" id="back-btn">← 返回</button>
+    <div id="canvas-container">
+      <div id="canvas-placeholder">
+        <p>正在准备渲染场景...</p>
+      </div>
+      <div id="controls">
+        <label for="depth-type">深度类型:</label>
+        <select id="depth-type">
+          <option value="normal">黑=近, 白=远</option>
+          <option value="inverted">白=近, 黑=远</option>
+          <option value="color">彩色深度图</option>
+        </select>
+
+        <label for="depth-slider">强度:</label>
+        <input type="range" id="depth-slider" min="0" max="100" value="20">
+        <span id="depth-value">20</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Three.js -->
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+        "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+      }
+    }
+  </script>
+
+  <script type="module">
+    import * as THREE from "three";
+    import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+
+    const uploadView = document.getElementById("upload-view");
+    const renderView = document.getElementById("render-view");
+    const renderBtn = document.getElementById("render-btn");
+    const backBtn = document.getElementById("back-btn");
+
+    const originalDropZone = document.getElementById("original-drop-zone");
+    const depthDropZone = document.getElementById("depth-drop-zone");
+    const originalInput = document.getElementById("original-input");
+    const depthInput = document.getElementById("depth-input");
+    const originalPreview = document.getElementById("original-preview");
+    const depthPreview = document.getElementById("depth-preview");
+
+    const canvasContainer = document.getElementById("canvas-container");
+    const canvasPlaceholder = document.getElementById("canvas-placeholder");
+    const depthSlider = document.getElementById("depth-slider");
+    const depthValue = document.getElementById("depth-value");
+
+    let originalTexture = null;
+    let depthTexture = null;
+    let scene, camera, renderer, controls, planeMesh;
+
+    const showRenderView = () => {
+      uploadView.classList.remove("active");
+      renderView.classList.add("active");
+    };
+
+    const showUploadView = () => {
+      renderView.classList.remove("active");
+      uploadView.classList.add("active");
+      if (renderer) renderer.dispose();
+    };
+
+    backBtn.addEventListener("click", showUploadView);
+
+    function initThree() {
+      scene = new THREE.Scene();
+      camera = new THREE.PerspectiveCamera(75, canvasContainer.clientWidth / canvasContainer.clientHeight, 0.1, 1000);
+      camera.position.z = 50;
+
+      renderer = new THREE.WebGLRenderer({ antialias: true });
+      renderer.setSize(canvasContainer.clientWidth, canvasContainer.clientHeight);
+      canvasContainer.appendChild(renderer.domElement);
+
+      controls = new OrbitControls(camera, renderer.domElement);
+      controls.enableDamping = true;
+
+      const ambient = new THREE.AmbientLight(0xffffff, 0.8);
+      const dir = new THREE.DirectionalLight(0xffffff, 0.8);
+      dir.position.set(0, 1, 1);
+      scene.add(ambient, dir);
+
+      window.addEventListener("resize", () => {
+        camera.aspect = canvasContainer.clientWidth / canvasContainer.clientHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(canvasContainer.clientWidth, canvasContainer.clientHeight);
+      });
+
+      animate();
+    }
+
+    function animate() {
+      requestAnimationFrame(animate);
+      controls.update();
+      renderer.render(scene, camera);
+    }
+
+    function renderScene() {
+      if (!originalTexture || !depthTexture) return;
+      if (!renderer) initThree();
+
+      if (planeMesh) {
+        scene.remove(planeMesh);
+        planeMesh.geometry.dispose();
+        planeMesh.material.dispose();
+      }
+
+      canvasPlaceholder.style.display = "none";
+
+      const aspect = originalTexture.image.width / originalTexture.image.height;
+      const planeW = 100;
+      const planeH = planeW / aspect;
+
+      const geometry = new THREE.PlaneGeometry(planeW, planeH, 300, 300);
+
+      // 获取当前深度类型
+      const depthType = document.getElementById("depth-type").value;
+      const displacementScale = parseFloat(depthSlider.value);
+
+      const uniforms = {
+        map: { value: originalTexture },
+        depthMap: { value: depthTexture },
+        depthScale: { value: displacementScale / 100.0 },
+        depthType: { value: depthType === "inverted" ? 1 : depthType === "color" ? 2 : 0 }
+      };
+
+      const vertexShader = /* glsl */`
+        varying vec2 vUv;
+        uniform sampler2D depthMap;
+        uniform float depthScale;
+        uniform int depthType;
+    
+        float getDepth(vec4 color) {
+          if (depthType == 0) {
+            // 黑=近, 白=远
+            return color.r;
+          } else if (depthType == 1) {
+            // 白=近, 黑=远
+            return 1.0 - color.r;
+          } else {
+            // 彩色深度
+            return dot(color.rgb, vec3(0.3333));
+          }
+        }
+    
+        void main() {
+          vUv = uv;
+          vec4 depthColor = texture2D(depthMap, uv);
+          float depth = getDepth(depthColor);
+          vec3 newPosition = position + normal * depth * depthScale * 100.0;
+          gl_Position = projectionMatrix * modelViewMatrix * vec4(newPosition, 1.0);
+        }
+      `;
+
+      const fragmentShader = /* glsl */`
+        varying vec2 vUv;
+        uniform sampler2D map;
+        void main() {
+          gl_FragColor = texture2D(map, vUv);
+        }
+      `;
+
+      const material = new THREE.ShaderMaterial({
+        uniforms,
+        vertexShader,
+        fragmentShader,
+      });
+
+      planeMesh = new THREE.Mesh(geometry, material);
+      scene.add(planeMesh);
+    }
+
+    depthSlider.addEventListener("input", e => {
+      const value = parseFloat(e.target.value);
+      depthValue.textContent = value;
+      if (planeMesh && planeMesh.material.uniforms) {
+        planeMesh.material.uniforms.depthScale.value = value / 100.0;
+      }
+    });
+
+    function handleFile(file, type) {
+      if (!file || !file.type.startsWith("image/")) return alert("请上传图片文件！");
+      const reader = new FileReader();
+      reader.onload = e => {
+        const preview = type === "original" ? originalPreview : depthPreview;
+        preview.src = e.target.result;
+        const dz = type === "original" ? originalDropZone : depthDropZone;
+        dz.classList.add("has-image");
+
+        new THREE.TextureLoader().load(e.target.result, tex => {
+          if (type === "original") originalTexture = tex;
+          else depthTexture = tex;
+          if (originalTexture && depthTexture) renderBtn.disabled = false;
+        });
+      };
+      reader.readAsDataURL(file);
+    }
+
+    function setupDropZone(dz, input, type) {
+      dz.addEventListener("click", () => input.click());
+      dz.addEventListener("dragover", e => { e.preventDefault(); dz.classList.add("drag-over"); });
+      dz.addEventListener("dragleave", () => dz.classList.remove("drag-over"));
+      dz.addEventListener("drop", e => {
+        e.preventDefault(); dz.classList.remove("drag-over");
+        if (e.dataTransfer.files.length) handleFile(e.dataTransfer.files[0], type);
+      });
+      dz.addEventListener("paste", e => {
+        for (const item of e.clipboardData.items) {
+          if (item.type.includes("image")) handleFile(item.getAsFile(), type);
+        }
+      });
+      input.addEventListener("change", e => {
+        if (e.target.files.length) handleFile(e.target.files[0], type);
+      });
+    }
+
+    setupDropZone(originalDropZone, originalInput, "original");
+    setupDropZone(depthDropZone, depthInput, "depth");
+    const depthTypeSelect = document.getElementById("depth-type");
+
+    depthTypeSelect.addEventListener("change", () => {
+      renderScene();
+    });
+    renderBtn.addEventListener("click", () => {
+      showRenderView();
+      setTimeout(renderScene, 100);
+    });
+  </script>
+</body>
+
+</html>
