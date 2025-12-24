@@ -1,0 +1,573 @@
+<!DOCTYPE html>
+<html lang="zh-CN" class="dark">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Markdown Workspace Pro</title>
+
+  <!-- TailwindCSS -->
+  <script src="https://cdn.tailwindcss.com?plugins=forms,typography"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            dark: {
+              bg: '#0d1117',
+              sidebar: '#010409',
+              border: '#30363d',
+              text: '#c9d1d9',
+              hover: '#161b22',
+              active: '#1f2428',
+              accent: '#238636'
+            }
+          }
+        }
+      }
+    }
+  </script>
+
+  <!-- Babel -->
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+  <!-- Import Map -->
+  <script type="importmap">
+    {
+        "imports": {
+            "react": "https://esm.sh/react@18.2.0",
+            "react-dom/client": "https://esm.sh/react-dom@18.2.0/client",
+            "react-markdown": "https://esm.sh/react-markdown@9.0.1?deps=react@18.2.0,react-dom@18.2.0",
+            "remark-gfm": "https://esm.sh/remark-gfm@4.0.0",
+            "lucide-react": "https://esm.sh/lucide-react@0.300.0?deps=react@18.2.0",
+            "uuid": "https://esm.sh/uuid@9.0.1",
+            "clsx": "https://esm.sh/clsx@2.1.0",
+            "@monaco-editor/react": "https://esm.sh/@monaco-editor/react@4.6.0?deps=react@18.2.0,react-dom@18.2.0"
+        }
+    }
+    </script>
+
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background-color: #0d1117;
+      color: #c9d1d9;
+    }
+
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+
+    ::-webkit-scrollbar-track {
+      background: #010409;
+    }
+
+    ::-webkit-scrollbar-thumb {
+      background: #30363d;
+      border-radius: 3px;
+    }
+
+    ::-webkit-scrollbar-thumb:hover {
+      background: #58a6ff;
+    }
+
+    .markdown-preview input[type="checkbox"] {
+      appearance: none;
+      width: 1.1em;
+      height: 1.1em;
+      border: 2px solid #30363d;
+      border-radius: 4px;
+      background-color: #0d1117;
+      position: relative;
+      margin-right: 0.5em;
+      top: 0.15em;
+      cursor: pointer;
+    }
+
+    .markdown-preview input[type="checkbox"]:checked {
+      background-color: #238636;
+      border-color: #238636;
+    }
+
+    .markdown-preview input[type="checkbox"]:checked::after {
+      content: '✓';
+      position: absolute;
+      color: white;
+      font-size: 0.75em;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+    }
+
+    .monaco-editor {
+      padding-top: 8px;
+    }
+  </style>
+</head>
+
+<body class="h-screen overflow-hidden flex flex-col">
+  <div id="root" class="h-full flex flex-col"></div>
+
+  <script type="text/babel" data-type="module">
+    import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+    import { createRoot } from 'react-dom/client';
+    import ReactMarkdown from 'react-markdown';
+    import remarkGfm from 'remark-gfm';
+    import { Editor as MonacoEditor } from '@monaco-editor/react';
+    import {
+      FolderOpen, FileText, ChevronRight, ChevronDown,
+      Plus, FolderPlus, Trash2, FilePlus, Save, LayoutTemplate, Columns, MonitorPlay,
+      RefreshCw
+    } from 'lucide-react';
+    import { clsx } from 'clsx';
+    import { v4 as uuidv4 } from 'uuid';
+
+    // --- 核心工具 ---
+
+    const calculateProgress = (content) => {
+      if (!content) return { total: 0, checked: 0, percent: 0 };
+      const total = (content.match(/^(\s*[-*]\s+\[)[ xX](\])/gm) || []).length;
+      const checked = (content.match(/^(\s*[-*]\s+\[)[xX](\])/gm) || []).length;
+      return { total, checked, percent: total === 0 ? 0 : (checked / total) * 100 };
+    };
+
+    const toggleCheckboxInText = (text, targetIndex) => {
+      let currentIndex = 0;
+      const regex = /^(\s*[-*]\s+\[)([ xX])(\])/gm;
+      return text.replace(regex, (match, prefix, status, suffix) => {
+        if (currentIndex === targetIndex) {
+          currentIndex++;
+          return `${prefix}${status.trim() ? ' ' : 'x'}${suffix}`;
+        }
+        currentIndex++;
+        return match;
+      });
+    };
+
+    const updateTreeState = (nodes, id, updater) => {
+      return nodes.map(node => {
+        if (node.id === id) return updater(node);
+        if (node.children) {
+          return { ...node, children: updateTreeState(node.children, id, updater) };
+        }
+        return node;
+      });
+    };
+
+    const findNode = (nodes, id) => {
+      for (const node of nodes) {
+        if (node.id === id) return node;
+        if (node.children) {
+          const found = findNode(node.children, id);
+          if (found) return found;
+        }
+      }
+      return null;
+    };
+
+    // --- 文件系统遍历 (增强版：读取内容计算进度) ---
+    const buildFileTreeWithParent = async (dirHandle, parentHandle, path = '') => {
+      const nodes = [];
+      for await (const entry of dirHandle.values()) {
+        const uniqueId = path + '/' + entry.name;
+        const node = {
+          id: uniqueId,
+          name: entry.name,
+          kind: entry.kind,
+          handle: entry,
+          parentHandle: dirHandle,
+          children: null,
+          isOpen: false,
+          stats: { total: 0, checked: 0, percent: 0 } // 默认进度
+        };
+
+        if (entry.kind === 'file') {
+          if (entry.name.endsWith('.md')) {
+            // 预读取内容以计算进度
+            // 注意：对于超大文件夹可能会慢，但对于 checklist 场景通常可以接受
+            try {
+              const file = await entry.getFile();
+              const text = await file.text();
+              node.stats = calculateProgress(text);
+              nodes.push(node);
+            } catch (e) {
+              console.warn(`Cannot read ${entry.name}`, e);
+              nodes.push(node); // 读取失败也显示，只是没进度
+            }
+          }
+        } else {
+          node.children = await buildFileTreeWithParent(entry, dirHandle, uniqueId);
+          nodes.push(node);
+        }
+      }
+      return nodes.sort((a, b) => {
+        if (a.kind === b.kind) return a.name.localeCompare(b.name);
+        return a.kind === 'directory' ? -1 : 1;
+      });
+    };
+
+    // --- 组件 ---
+
+    const TreeNode = ({ node, activeId, onSelect, onToggle, onDelete, onNewItem, depth = 0 }) => {
+      const isFolder = node.kind === 'directory';
+      const { total, checked, percent } = node.stats || { total: 0, checked: 0, percent: 0 };
+
+      return (
+        <div>
+          <div
+            className={clsx(
+              "group flex items-start pr-2 py-1.5 cursor-pointer transition-colors border-l-2 select-none",
+              node.id === activeId
+                ? "bg-dark-active border-blue-500"
+                : "hover:bg-dark-hover border-transparent"
+            )}
+            style={{ paddingLeft: `${depth * 12 + 8}px` }}
+            onClick={() => isFolder ? onToggle(node.id) : onSelect(node)}
+          >
+            {/* 图标 */}
+            <div className="p-1 mr-1 text-gray-400 mt-0.5">
+              {isFolder ? (
+                node.isOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />
+              ) : <FileText size={14} className={node.id === activeId ? "text-blue-400" : ""} />}
+            </div>
+
+            {/* 内容区域 */}
+            <div className="flex-1 min-w-0 flex flex-col gap-0.5">
+              <span className={clsx("truncate text-sm", node.id === activeId ? "text-white font-medium" : "text-dark-text")}>
+                {node.name}
+              </span>
+
+              {/* 进度条 (仅文件且有checkbox时显示) */}
+              {!isFolder && total > 0 && (
+                <div className="flex items-center gap-2 mt-0.5">
+                  <div className="flex-1 h-1 bg-gray-800 rounded-full overflow-hidden max-w-[80px]">
+                    <div
+                      className="h-full bg-dark-accent transition-all duration-300"
+                      style={{ width: `${percent}%` }}
+                    />
+                  </div>
+                  <span className="text-[10px] text-gray-500 font-mono">{checked}/{total}</span>
+                </div>
+              )}
+            </div>
+
+            {/* 操作按钮 (Hover显示) */}
+            <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity ml-2">
+              {isFolder ? (
+                <>
+                  <button onClick={(e) => { e.stopPropagation(); onNewItem(node, 'file') }} className="p-1 hover:text-white hover:bg-gray-700 rounded" title="新建文件"><FilePlus size={12} /></button>
+                  <button onClick={(e) => { e.stopPropagation(); onNewItem(node, 'folder') }} className="p-1 hover:text-white hover:bg-gray-700 rounded" title="新建文件夹"><FolderPlus size={12} /></button>
+                </>
+              ) : null}
+              <button onClick={(e) => { e.stopPropagation(); onDelete(node) }} className="p-1 hover:text-red-400 hover:bg-gray-700 rounded" title="删除"><Trash2 size={12} /></button>
+            </div>
+          </div>
+
+          {/* 子节点 */}
+          {isFolder && node.isOpen && node.children && (
+            <div>
+              {node.children.map(child => (
+                <TreeNode
+                  key={child.id}
+                  node={child}
+                  activeId={activeId}
+                  onSelect={onSelect}
+                  onToggle={onToggle}
+                  onDelete={onDelete}
+                  onNewItem={onNewItem}
+                  depth={depth + 1}
+                />
+              ))}
+            </div>
+          )}
+        </div>
+      );
+    };
+
+    const Editor = ({ content, onChange, onSave }) => (
+      <MonacoEditor
+        height="100%"
+        defaultLanguage="markdown"
+        theme="vs-dark"
+        value={content}
+        onChange={(val) => onChange(val)}
+        options={{
+          minimap: { enabled: false },
+          wordWrap: 'on',
+          fontSize: 14,
+          lineNumbers: 'on',
+          automaticLayout: true,
+          padding: { top: 16 }
+        }}
+        onMount={(editor, monaco) => {
+          editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () => onSave());
+        }}
+      />
+    );
+
+    const Preview = ({ content, onToggleTodo }) => {
+      const checkboxCount = useRef(0);
+      checkboxCount.current = 0;
+      const components = useMemo(() => ({
+        input: (props) => {
+          if (props.type === 'checkbox') {
+            const idx = checkboxCount.current++;
+            return <input type="checkbox" checked={props.checked || false} onChange={() => onToggleTodo(idx)} />;
+          }
+          return <input {...props} />;
+        },
+        li: ({ node, ...props }) => <li className="flex items-start my-1" {...props} />
+      }), [content]);
+
+      return (
+        <div className="prose prose-invert max-w-none p-8 overflow-y-auto h-full markdown-preview text-gray-300">
+          <ReactMarkdown remarkPlugins={[remarkGfm]} components={components}>
+            {content || ''}
+          </ReactMarkdown>
+        </div>
+      );
+    };
+
+    // --- 主程序 ---
+
+    const App = () => {
+      const [rootHandle, setRootHandle] = useState(null);
+      const [tree, setTree] = useState([]);
+      const [activeFile, setActiveFile] = useState(null);
+      const [viewMode, setViewMode] = useState('split');
+      const [status, setStatus] = useState('');
+      const autoSaveTimer = useRef(null);
+
+      // 递归合并 isOpen 状态
+      const mergeState = (newNodes, oldNodes) => {
+        return newNodes.map(newNode => {
+          const oldNode = findNode(oldNodes, newNode.id);
+          if (oldNode && oldNode.isOpen) newNode.isOpen = true;
+          if (newNode.children) newNode.children = mergeState(newNode.children, oldNodes);
+          return newNode;
+        });
+      };
+
+      const openWorkspace = async () => {
+        try {
+          const handle = await window.showDirectoryPicker();
+          setRootHandle(handle);
+          const nodes = await buildFileTreeWithParent(handle, null);
+          setTree(nodes);
+        } catch (e) { console.log(e) }
+      };
+
+      const refreshTree = async () => {
+        if (!rootHandle) return;
+        const nodes = await buildFileTreeWithParent(rootHandle, null);
+        setTree(prev => mergeState(nodes, prev));
+      };
+
+      const loadFile = async (node) => {
+        try {
+          // 如果已经打开且内容未变，不重读？不，为了确保同步还是重读
+          const file = await node.handle.getFile();
+          const text = await file.text();
+          setActiveFile({
+            id: node.id,
+            name: node.name,
+            handle: node.handle,
+            content: text
+          });
+        } catch (e) {
+          alert("无法读取文件");
+        }
+      };
+
+      const saveFile = async (text, fileObj = activeFile) => {
+        if (!fileObj || !fileObj.handle) return;
+        setStatus('saving');
+        try {
+          const writable = await fileObj.handle.createWritable();
+          await writable.write(text);
+          await writable.close();
+          setStatus('saved');
+          setTimeout(() => setStatus(''), 2000);
+        } catch (e) {
+          console.error(e);
+          setStatus('error');
+        }
+      };
+
+      const handleNewItem = async (parentNode, type) => {
+        const name = prompt(`输入新${type === 'file' ? '文件' : '文件夹'}名称:`);
+        if (!name) return;
+        const finalName = type === 'file' && !name.endsWith('.md') ? name + '.md' : name;
+
+        try {
+          if (type === 'file') {
+            await parentNode.handle.getFileHandle(finalName, { create: true });
+          } else {
+            await parentNode.handle.getDirectoryHandle(finalName, { create: true });
+          }
+          await refreshTree();
+          // 展开父节点
+          setTree(prev => updateTreeState(prev, parentNode.id, n => ({ ...n, isOpen: true })));
+        } catch (e) { alert("创建失败: " + e.message); }
+      };
+
+      const handleNewRootItem = async (type) => {
+        if (!rootHandle) return;
+        const name = prompt(`输入新${type === 'file' ? '文件' : '文件夹'}名称:`);
+        if (!name) return;
+        const finalName = type === 'file' && !name.endsWith('.md') ? name + '.md' : name;
+        try {
+          if (type === 'file') await rootHandle.getFileHandle(finalName, { create: true });
+          else await rootHandle.getDirectoryHandle(finalName, { create: true });
+          await refreshTree();
+        } catch (e) { alert("创建失败"); }
+      };
+
+      const handleDelete = async (node) => {
+        if (!confirm(`确定删除 ${node.name}?`)) return;
+        try {
+          if (node.parentHandle) await node.parentHandle.removeEntry(node.name, { recursive: node.kind === 'directory' });
+          else if (rootHandle) await rootHandle.removeEntry(node.name, { recursive: node.kind === 'directory' });
+
+          if (activeFile?.id === node.id) setActiveFile(null);
+          await refreshTree();
+        } catch (e) { alert("删除失败: " + e.message); }
+      };
+
+      // 核心：处理内容变更并实时更新左侧进度条
+      const handleContentChange = (val) => {
+        if (!activeFile) return;
+
+        // 1. 计算新进度
+        const newStats = calculateProgress(val);
+
+        // 2. 更新内存中的 activeFile
+        const newActive = { ...activeFile, content: val };
+        setActiveFile(newActive);
+
+        // 3. 实时更新 Tree state 中的 stats，以便侧边栏立即反映变化
+        setTree(prev => updateTreeState(prev, activeFile.id, n => ({ ...n, stats: newStats })));
+
+        // 4. 状态反馈
+        document.title = `* ${activeFile.name}`;
+        setStatus('unsaved');
+
+        // 5. 自动保存
+        if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
+        autoSaveTimer.current = setTimeout(() => {
+          saveFile(val, newActive);
+          document.title = activeFile.name;
+        }, 1000);
+      };
+
+      const handleToggleTodo = (index) => {
+        if (!activeFile) return;
+        const newContent = toggleCheckboxInText(activeFile.content, index);
+        handleContentChange(newContent);
+      };
+
+      const handleToggleNode = (id) => {
+        setTree(prev => updateTreeState(prev, id, n => ({ ...n, isOpen: !n.isOpen })));
+      };
+
+      // --- 渲染 ---
+
+      if (!rootHandle) {
+        return (
+          <div className="flex h-full items-center justify-center bg-dark-bg text-dark-text flex-col gap-6">
+            <div className="text-center space-y-2">
+              <h1 className="text-3xl font-bold">Markdown Workspace</h1>
+              <p className="text-gray-500">Local File System • Checklists • Auto Save</p>
+            </div>
+            <button onClick={openWorkspace} className="flex items-center gap-2 px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-all text-lg font-medium shadow-lg">
+              <FolderOpen /> 打开本地文件夹
+            </button>
+          </div>
+        );
+      }
+
+      return (
+        <div className="flex flex-col h-full">
+          {/* Header */}
+          <div className="h-10 bg-dark-sidebar border-b border-dark-border flex items-center justify-between px-3 shrink-0">
+            <div className="flex items-center gap-2 text-sm text-gray-400">
+              <span className="font-bold text-gray-200">{rootHandle.name}</span>
+              <span>/</span>
+              {activeFile ? <span className="text-white">{activeFile.name}</span> : <span>...</span>}
+              {status === 'saving' && <span className="text-yellow-500 text-xs ml-2">Saving...</span>}
+              {status === 'saved' && <span className="text-green-500 text-xs ml-2">Saved</span>}
+            </div>
+
+            <div className="flex items-center gap-2">
+              <div className="flex bg-dark-bg rounded border border-dark-border p-0.5">
+                <button onClick={() => setViewMode('edit')} className={`p-1 rounded ${viewMode === 'edit' ? 'bg-gray-700' : 'text-gray-500'}`} title="Editor"><LayoutTemplate size={14} className="rotate-180" /></button>
+                <button onClick={() => setViewMode('split')} className={`p-1 rounded ${viewMode === 'split' ? 'bg-gray-700' : 'text-gray-500'}`} title="Split"><Columns size={14} /></button>
+                <button onClick={() => setViewMode('preview')} className={`p-1 rounded ${viewMode === 'preview' ? 'bg-gray-700' : 'text-gray-500'}`} title="Preview"><MonitorPlay size={14} /></button>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex-1 flex overflow-hidden">
+            {/* Sidebar */}
+            <div className="w-64 bg-dark-sidebar border-r border-dark-border flex flex-col">
+              <div className="p-2 border-b border-dark-border flex justify-between items-center text-gray-400">
+                <span className="text-xs font-bold uppercase tracking-wider">Explorer</span>
+                <div className="flex gap-1">
+                  <button onClick={() => handleNewRootItem('file')} className="p-1 hover:text-white" title="根目录新建文件"><FilePlus size={14} /></button>
+                  <button onClick={() => handleNewRootItem('folder')} className="p-1 hover:text-white" title="根目录新建文件夹"><FolderPlus size={14} /></button>
+                  <button onClick={refreshTree} className="p-1 hover:text-white" title="刷新"><RefreshCw size={14} /></button>
+                </div>
+              </div>
+              <div className="flex-1 overflow-y-auto py-2">
+                {tree.map(node => (
+                  <TreeNode
+                    key={node.id}
+                    node={node}
+                    activeId={activeFile?.id}
+                    onSelect={loadFile}
+                    onToggle={handleToggleNode}
+                    onDelete={handleDelete}
+                    onNewItem={handleNewItem}
+                  />
+                ))}
+              </div>
+            </div>
+
+            {/* Main */}
+            <div className="flex-1 flex bg-dark-bg relative">
+              {!activeFile ? (
+                <div className="flex-1 flex items-center justify-center text-gray-600 flex-col gap-2">
+                  <FileText size={48} className="opacity-20" />
+                  <p>选择文件查看进度</p>
+                </div>
+              ) : (
+                <>
+                  <div className={`h-full border-r border-dark-border bg-[#1e1e1e] ${viewMode === 'edit' ? 'w-full' : viewMode === 'split' ? 'w-1/2' : 'hidden'}`}>
+                    <Editor
+                      content={activeFile.content}
+                      onChange={handleContentChange}
+                      onSave={() => saveFile(activeFile.content)}
+                    />
+                  </div>
+                  <div className={`h-full bg-dark-bg ${viewMode === 'preview' ? 'w-full' : viewMode === 'split' ? 'w-1/2' : 'hidden'}`}>
+                    <Preview
+                      content={activeFile.content}
+                      onToggleTodo={handleToggleTodo}
+                    />
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      );
+    };
+
+    const root = createRoot(document.getElementById('root'));
+    root.render(<App />);
+  </script>
+</body>
+
+</html>
