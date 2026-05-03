@@ -43,7 +43,6 @@
       --color-error-content: #1e1e1e;
     }
 
-    /* 自定义滚动条（VSCode 风格） */
     .custom-scroll::-webkit-scrollbar {
       width: 6px;
       height: 6px;
@@ -61,10 +60,37 @@
     .custom-scroll::-webkit-scrollbar-thumb:hover {
       background: #4f4f4f;
     }
+
+    /* 限制长代码块高度 */
+    .component-value {
+      max-height: 120px;
+      overflow-y: auto;
+    }
+
+    .component-value::-webkit-scrollbar {
+      width: 4px;
+    }
+
+    .component-value::-webkit-scrollbar-thumb {
+      background: #555;
+      border-radius: 2px;
+    }
   </style>
 </head>
 
 <body>
+  <!-- 用于 Puppeteer 对接的全局 Promise -->
+  <script>
+    (() => {
+      let resolveData;
+      window.__fingerprintDataPromise = new Promise((resolve) => {
+        resolveData = resolve;
+      });
+      window.getFingerprintResult = () => window.__fingerprintDataPromise;
+      window.__resolveFingerprintData = resolveData;
+    })();
+  </script>
+
   <div id="root"></div>
 
   <script type="text/babel">
@@ -76,12 +102,12 @@
     import { createRoot } from "react-dom/client"
     import {
       Fingerprint, Globe, MapPin, Clock, Building, Hash, Loader2,
-      Monitor, Cpu, Wifi, Layout, Smartphone, Layers, Info
+      Monitor, Cpu, Wifi, Layout, Smartphone, Layers, Info, Search, X
     } from "lucide-react"
     import { create } from "zustand"
     import FingerprintJS from "@fingerprintjs/fingerprintjs"
 
-    // 全局状态管理
+    // 全局状态管理（指纹、IP、加载状态）
     const useStore = create((set) => ({
       fingerprint: null,
       fingerprintComponents: null,
@@ -97,7 +123,7 @@
       setError: (error) => set({ error }),
     }))
 
-    // 辅助函数：格式化组件值
+    // 辅助函数
     function formatComponentValue(value) {
       if (value === null || value === undefined) return 'null';
       if (typeof value === 'object') {
@@ -110,7 +136,6 @@
       return String(value);
     }
 
-    // 根据组件名称匹配图标
     function getComponentIcon(name) {
       const lower = name.toLowerCase();
       if (lower.includes('canvas')) return <Layout className="w-4 h-4" />;
@@ -121,6 +146,104 @@
       if (lower.includes('platform') || lower.includes('vendor')) return <Smartphone className="w-4 h-4" />;
       if (lower.includes('language') || lower.includes('fonts')) return <Layers className="w-4 h-4" />;
       return <Info className="w-4 h-4" />;
+    }
+
+    // 右侧面板组件（独立以使用搜索状态）
+    function FingerprintPanel({ components }) {
+      const [searchTerm, setSearchTerm] = React.useState('');
+
+      const filtered = React.useMemo(() => {
+        if (!components) return [];
+        if (!searchTerm.trim()) return Object.entries(components);
+        const lowerSearch = searchTerm.toLowerCase();
+        return Object.entries(components).filter(([key]) =>
+          key.toLowerCase().includes(lowerSearch)
+        );
+      }, [components, searchTerm]);
+
+      return (
+        <div className="flex-1 flex flex-col min-w-0">
+          {/* 顶栏：标题 + 搜索框 + 项目链接 */}
+          <div className="p-3 border-b border-base-300 bg-base-200">
+            <div className="flex items-center justify-between gap-3">
+              <h2 className="text-lg font-semibold text-base-content flex items-center gap-2 shrink-0">
+                <Layers className="w-5 h-5 text-primary" />
+                指纹组件详情
+                <span className="text-sm font-normal text-base-content/50">
+                  ({components ? Object.keys(components).length : 0} 项)
+                </span>
+              </h2>
+              <div className="flex-1 flex justify-end items-center gap-2">
+                <div className="relative">
+                  <input
+                    type="text"
+                    placeholder="搜索组件..."
+                    className="input input-sm input-bordered bg-base-100 text-base-content w-44 md:w-56"
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                  />
+                  {searchTerm ? (
+                    <button
+                      className="absolute right-2 top-1/2 -translate-y-1/2 text-base-content/40 hover:text-base-content"
+                      onClick={() => setSearchTerm('')}
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  ) : (
+                    <Search className="absolute right-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-base-content/40" />
+                  )}
+                </div>
+                <a
+                  href="https://github.com/lenml/page-tools/tree/main/pages/myfp"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-xs text-base-content/50 hover:text-primary transition-colors shrink-0 hidden sm:inline"
+                  title="项目地址"
+                >
+                  🔗 项目地址
+                </a>
+              </div>
+            </div>
+          </div>
+
+          {/* 组件网格 */}
+          <div className="flex-1 overflow-y-auto custom-scroll p-3">
+            {filtered.length > 0 ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+                {filtered.map(([key, component]) => {
+                  const valueStr = component.value !== undefined
+                    ? formatComponentValue(component.value)
+                    : formatComponentValue(component);
+                  return (
+                    <div key={key} className="card bg-base-200 border border-base-300 shadow-sm hover:shadow-md transition-shadow">
+                      <div className="card-body p-3">
+                        <div className="flex items-center gap-2 mb-2">
+                          <span className="text-primary">{getComponentIcon(key)}</span>
+                          <h3 className="font-medium text-sm text-base-content capitalize leading-tight">
+                            {key.replace(/([A-Z])/g, ' $1').replace(/_/g, ' ')}
+                          </h3>
+                          {component.duration !== undefined && (
+                            <span className="text-xs text-base-content/30 ml-auto">{component.duration}ms</span>
+                          )}
+                        </div>
+                        <div className="bg-base-100 rounded-lg p-2 component-value">
+                          <pre className="text-xs text-base-content whitespace-pre-wrap break-all font-mono leading-relaxed">
+                            {valueStr}
+                          </pre>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="text-center text-base-content/40 py-8">
+                {searchTerm ? '没有匹配的组件' : '没有可用的组件数据'}
+              </div>
+            )}
+          </div>
+        </div>
+      );
     }
 
     function App() {
@@ -141,9 +264,28 @@
             const data = await response.json()
             setIpData(data)
             setError(null)
+
+            // 通过全局函数暴露给 Puppeteer
+            if (window.__resolveFingerprintData) {
+              window.__resolveFingerprintData({
+                fingerprint: result.visitorId,
+                components: result.components,
+                ipData: data,
+              });
+            }
           } catch (err) {
             console.error(err)
-            setError("获取信息失败，请检查网络连接或稍后重试。")
+            const errorMsg = "获取信息失败，请检查网络连接或稍后重试。";
+            setError(errorMsg)
+
+            if (window.__resolveFingerprintData) {
+              window.__resolveFingerprintData({
+                error: errorMsg,
+                fingerprint: null,
+                components: null,
+                ipData: null,
+              });
+            }
           } finally {
             setLoading(false)
           }
@@ -151,7 +293,6 @@
         fetchData()
       }, [])
 
-      // 全屏加载状态
       if (loading) {
         return (
           <div className="h-screen flex items-center justify-center bg-base-100">
@@ -163,7 +304,6 @@
         )
       }
 
-      // 全屏错误状态
       if (error) {
         return (
           <div className="h-screen flex items-center justify-center bg-base-100">
@@ -183,13 +323,11 @@
         )
       }
 
-      // 主应用布局：左右分栏，高度撑满屏幕
       return (
         <div className="h-screen flex overflow-hidden bg-base-100">
-          {/* ========== 左侧面板：IP 信息 + 指纹摘要 ========== */}
+          {/* 左侧面板：IP 信息 + 指纹摘要 */}
           <div className="w-80 lg:w-96 flex-shrink-0 border-r border-base-300 overflow-y-auto custom-scroll p-4">
             <div className="space-y-4">
-              {/* 标题 */}
               <div className="text-center mb-6">
                 <h1 className="text-xl font-bold text-base-content flex items-center justify-center gap-2">
                   <Fingerprint className="w-6 h-6 text-primary" />
@@ -197,7 +335,7 @@
                 </h1>
               </div>
 
-              {/* 指纹摘要卡片 */}
+              {/* 指纹 ID 卡片 */}
               <div className="card bg-base-200 shadow-md border border-base-300">
                 <div className="card-body p-4">
                   <h2 className="card-title text-sm text-base-content/70 flex items-center gap-2">
@@ -258,7 +396,6 @@
                 </div>
               </div>
 
-              {/* 重新检测按钮 */}
               <div className="text-center pt-2">
                 <button className="btn btn-outline btn-primary btn-sm gap-2 w-full" onClick={() => location.reload()}>
                   <Loader2 className="w-4 h-4" /> 重新检测
@@ -267,53 +404,8 @@
             </div>
           </div>
 
-          {/* ========== 右侧面板：指纹组件详情 ========== */}
-          <div className="flex-1 flex flex-col min-w-0">
-            {/* 头部 */}
-            <div className="p-4 border-b border-base-300 bg-base-200">
-              <h2 className="text-lg font-semibold text-base-content flex items-center gap-2">
-                <Layers className="w-5 h-5 text-primary" />
-                指纹组件详情
-                <span className="text-sm font-normal text-base-content/50 ml-2">
-                  ({fingerprintComponents ? Object.keys(fingerprintComponents).length : 0} 项)
-                </span>
-              </h2>
-            </div>
-
-            {/* 可滚动的组件列表 */}
-            <div className="flex-1 overflow-y-auto custom-scroll p-4">
-              {fingerprintComponents ? (
-                <div className="grid gap-3">
-                  {Object.entries(fingerprintComponents).map(([key, component]) => (
-                    <div key={key} className="card bg-base-200 border border-base-300 shadow-sm">
-                      <div className="card-body p-3">
-                        <div className="flex items-center gap-2 mb-1">
-                          <span className="text-primary">{getComponentIcon(key)}</span>
-                          <h3 className="font-medium text-sm text-base-content capitalize">
-                            {key.replace(/([A-Z])/g, ' $1').replace(/_/g, ' ')}
-                          </h3>
-                        </div>
-                        <div className="bg-base-100 rounded-lg p-2 mt-1">
-                          <pre className="text-xs text-base-content whitespace-pre-wrap break-all font-mono">
-                            {component.value !== undefined
-                              ? formatComponentValue(component.value)
-                              : formatComponentValue(component)}
-                          </pre>
-                        </div>
-                        {component.duration !== undefined && (
-                          <div className="text-xs text-base-content/40 mt-1">
-                            ⏱ 检测耗时: {component.duration}ms
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <div className="text-center text-base-content/40 py-8">没有可用的组件数据</div>
-              )}
-            </div>
-          </div>
+          {/* 右侧面板：指纹组件详情（带搜索和网格布局） */}
+          <FingerprintPanel components={fingerprintComponents} />
         </div>
       )
     }
