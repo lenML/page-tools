@@ -1,3 +1,8 @@
+---
+title: LaTex Preview
+desc: LaTex 格式渲染 （兼容LLM输出风格）
+---
+
 # Markdown & LaTeX Preview
 
 a markdown previewer and support MathJax
