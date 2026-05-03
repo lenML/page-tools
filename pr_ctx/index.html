@@ -1,0 +1,864 @@
+<!DOCTYPE html>
+<html data-theme="dark">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI Context Prompt Tool</title>
+  <script type="importmap">
+    {
+      "imports": {
+        "react": "https://esm.sh/react@19.2.4",
+        "react/jsx-runtime": "https://esm.sh/react@19.2.4/jsx-runtime",
+        "react-dom/client": "https://esm.sh/react-dom@19.2.4/client",
+        "lucide-react": "https://esm.sh/lucide-react?external=react",
+        "zustand": "https://esm.sh/zustand?external=react"
+      }
+    }
+  </script>
+  <!-- esm.sh/tsx => babel + tsx runtime -->
+  <script type="module" src="https://esm.sh/tsx"></script>
+  <!-- daisyui usage: https://daisyui.com/llms.txt -->
+  <link href="https://cdn.jsdelivr.net/npm/daisyui@5" rel="stylesheet" type="text/css" />
+  <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+  <!-- Monaco Editor -->
+  <script src="https://cdn.jsdelivr.net/npm/monaco-editor@0.52.2/min/vs/loader.js"></script>
+  <style>
+    body {
+      margin: 0;
+      overflow: hidden;
+    }
+
+    .monaco-diff-editor {
+      height: 100%;
+    }
+
+    .file-tree-item {
+      cursor: pointer;
+      user-select: none;
+    }
+
+    .file-tree-item:hover {
+      background-color: rgba(255, 255, 255, 0.05);
+    }
+
+    .file-tree-item.selected {
+      background-color: rgba(59, 130, 246, 0.2);
+    }
+
+    .scrollbar-thin::-webkit-scrollbar {
+      width: 6px;
+    }
+
+    .scrollbar-thin::-webkit-scrollbar-track {
+      background: transparent;
+    }
+
+    .scrollbar-thin::-webkit-scrollbar-thumb {
+      background: rgba(255, 255, 255, 0.2);
+      border-radius: 3px;
+    }
+
+    .tab-active {
+      border-bottom: 2px solid #3b82f6;
+      color: #3b82f6;
+    }
+
+    .tab-inactive {
+      border-bottom: 2px solid transparent;
+      color: #9ca3af;
+    }
+
+    .tab-inactive:hover {
+      color: #d1d5db;
+    }
+  </style>
+  <base target="_blank">
+</head>
+
+<body>
+  <div id="root"></div>
+
+  <script type="text/babel">
+    import * as React from "react";
+    window.React = React;
+  </script>
+
+  <script type="text/babel">
+    import { createRoot } from "react-dom/client"
+    import {
+      FolderOpen, FileText, Check, X, ChevronRight, ChevronDown,
+      Search, Copy, Play, Save, FileCode, Folder, Trash2, AlertCircle
+    } from "lucide-react"
+    import { create } from "zustand"
+
+    // ==================== Utility Functions ====================
+
+    const EXCLUDED_DIRS = new Set(['.git', 'node_modules', '.next', 'dist', 'build', '.vscode', '.idea', '__pycache__', 'venv', '.venv'])
+
+    const getCommentPrefix = (ext) => {
+      const slashComment = new Set(['js', 'ts', 'jsx', 'tsx', 'java', 'c', 'cpp', 'h', 'hpp', 'cs', 'go', 'rs', 'swift', 'kt', 'php', 'css', 'scss', 'sass', 'less', 'json', 'html', 'xml', 'yaml', 'yml', 'ini', 'toml'])
+      const hashComment = new Set(['py', 'sh', 'bash', 'zsh', 'fish', 'rb', 'pl', 'r', 'sql', 'dockerfile', 'makefile', 'cmake'])
+      if (slashComment.has(ext)) return '//'
+      if (hashComment.has(ext)) return '#'
+      return '#'
+    }
+
+    const getLanguageTag = (ext) => {
+      const map = {
+        'js': 'javascript', 'ts': 'typescript', 'jsx': 'jsx', 'tsx': 'tsx',
+        'py': 'python', 'java': 'java', 'c': 'c', 'cpp': 'cpp', 'h': 'c',
+        'hpp': 'cpp', 'cs': 'csharp', 'go': 'go', 'rs': 'rust',
+        'swift': 'swift', 'kt': 'kotlin', 'php': 'php', 'rb': 'ruby',
+        'sh': 'bash', 'bash': 'bash', 'zsh': 'bash', 'fish': 'bash',
+        'sql': 'sql', 'html': 'html', 'css': 'css', 'scss': 'scss',
+        'sass': 'sass', 'less': 'less', 'json': 'json', 'xml': 'xml',
+        'yaml': 'yaml', 'yml': 'yaml', 'md': 'markdown', 'dockerfile': 'dockerfile',
+        'makefile': 'makefile', 'cmake': 'cmake', 'pl': 'perl', 'r': 'r',
+        'ini': 'ini', 'toml': 'toml', 'txt': 'text'
+      }
+      return map[ext] || ext || 'text'
+    }
+
+    const getExtension = (filename) => {
+      const parts = filename.split('.')
+      return parts.length > 1 ? parts[parts.length - 1].toLowerCase() : ''
+    }
+
+    // ==================== Zustand Store ====================
+
+    const useStore = create((set, get) => ({
+      // File system
+      dirHandle: null,
+      fileTree: [],
+      selectedPaths: new Set(),
+      expandedDirs: new Set(),
+      searchQuery: '',
+      fileContents: new Map(), // path -> content
+
+      // UI state
+      activeTab: 'context', // 'context' | 'patch'
+      patchText: '',
+      parsedPatches: [], // {path, newContent, originalContent}
+      appliedPatches: new Set(),
+      error: null,
+
+      // Actions
+      setDirHandle: (handle) => set({ dirHandle: handle }),
+      setFileTree: (tree) => set({ fileTree: tree }),
+      toggleSelected: (path) => {
+        const selected = new Set(get().selectedPaths)
+        if (selected.has(path)) selected.delete(path)
+        else selected.add(path)
+        set({ selectedPaths: selected })
+      },
+      selectAll: (paths) => set({ selectedPaths: new Set(paths) }),
+      clearSelection: () => set({ selectedPaths: new Set() }),
+      toggleExpanded: (path) => {
+        const expanded = new Set(get().expandedDirs)
+        if (expanded.has(path)) expanded.delete(path)
+        else expanded.add(path)
+        set({ expandedDirs: expanded })
+      },
+      setSearchQuery: (q) => set({ searchQuery: q }),
+      setFileContent: (path, content) => {
+        const contents = new Map(get().fileContents)
+        contents.set(path, content)
+        set({ fileContents: contents })
+      },
+      setActiveTab: (tab) => set({ activeTab: tab }),
+      setPatchText: (text) => set({ patchText: text }),
+      setParsedPatches: (patches) => set({ parsedPatches: patches, appliedPatches: new Set() }),
+      setAppliedPatch: (path) => {
+        const applied = new Set(get().appliedPatches)
+        applied.add(path)
+        set({ appliedPatches: applied })
+      },
+      setError: (err) => set({ error: err }),
+      clearError: () => set({ error: null }),
+
+      // Reset
+      reset: () => set({
+        dirHandle: null,
+        fileTree: [],
+        selectedPaths: new Set(),
+        expandedDirs: new Set(),
+        searchQuery: '',
+        fileContents: new Map(),
+        patchText: '',
+        parsedPatches: [],
+        appliedPatches: new Set(),
+        error: null
+      })
+    }))
+
+    // ==================== File System API ====================
+
+    async function selectDirectory() {
+      try {
+        const handle = await window.showDirectoryPicker()
+        const store = useStore.getState()
+        store.setDirHandle(handle)
+        store.clearSelection()
+        store.setFileTree([])
+        store.setSearchQuery('')
+
+        const tree = await buildFileTree(handle, '')
+        store.setFileTree(tree)
+
+        // Auto-expand root
+        store.toggleExpanded('')
+      } catch (err) {
+        if (err.name !== 'AbortError') {
+          useStore.getState().setError('Failed to open directory: ' + err.message)
+        }
+      }
+    }
+
+    /**
+      *
+      * @param {FileSystemDirectoryHandle} handle
+      * @param {string} path
+      * @returns {Promise<FileSystemFileHandle[]>}
+    */
+    async function buildFileTree(dirHandle, path) {
+      const entries = []
+      for await (const [name, handle] of dirHandle.entries()) {
+        const childPath = path ? `${path}/${name}` : name
+        if (handle.kind === 'directory') {
+          if (EXCLUDED_DIRS.has(name)) continue
+          entries.push({
+            name,
+            path: childPath,
+            kind: 'directory',
+            handle,
+            children: await buildFileTree(handle, childPath)
+          })
+        } else {
+          const file = await handle.getFile()
+          const mime = file.type
+          const excluded_exts = [".db", ".sqlite", ".db-wal", ".db-shm", ".sqlite-shm", ".sqlite-wal", "pnpm-lock-yaml", "pnpm-workspace.yaml"]
+          if (mime.startsWith("image/")) continue
+          if (mime.startsWith("video/")) continue
+          if (excluded_exts.some(x => name.endsWith(x))) continue
+          entries.push({
+            name,
+            path: childPath,
+            kind: 'file',
+            handle
+          })
+        }
+      }
+      // Sort: directories first, then alphabetically
+      entries.sort((a, b) => {
+        if (a.kind !== b.kind) return a.kind === 'directory' ? -1 : 1
+        return a.name.localeCompare(b.name)
+      })
+      return entries
+    }
+
+    async function readFileContent(fileHandle) {
+      const file = await fileHandle.getFile()
+      return await file.text()
+    }
+
+    async function writeFileContent(dirHandle, relativePath, content) {
+      const parts = relativePath.split('/')
+      let currentHandle = dirHandle
+
+      // Navigate/create directories
+      for (let i = 0; i < parts.length - 1; i++) {
+        try {
+          currentHandle = await currentHandle.getDirectoryHandle(parts[i], { create: true })
+        } catch (err) {
+          throw new Error(`Cannot create directory ${parts[i]}: ${err.message}`)
+        }
+      }
+
+      // Write file
+      const fileHandle = await currentHandle.getFileHandle(parts[parts.length - 1], { create: true })
+      const writable = await fileHandle.createWritable()
+      await writable.write(content)
+      await writable.close()
+    }
+
+    async function getFileHandleByPath(dirHandle, relativePath) {
+      const parts = relativePath.split('/')
+      let currentHandle = dirHandle
+
+      for (let i = 0; i < parts.length - 1; i++) {
+        currentHandle = await currentHandle.getDirectoryHandle(parts[i])
+      }
+
+      return await currentHandle.getFileHandle(parts[parts.length - 1])
+    }
+
+    // ==================== Context Generation ====================
+
+    async function generateContext() {
+      const store = useStore.getState()
+      const { dirHandle, selectedPaths, fileContents } = store
+
+      if (!dirHandle || selectedPaths.size === 0) return ''
+
+      let context = ''
+      const sortedPaths = Array.from(selectedPaths).sort()
+
+      for (const path of sortedPaths) {
+        let content = fileContents.get(path)
+        if (!content) {
+          try {
+            const fileHandle = await getFileHandleByPath(dirHandle, path)
+            content = await readFileContent(fileHandle)
+            store.setFileContent(path, content)
+          } catch (err) {
+            console.error(`Cannot read ${path}:`, err)
+            continue
+          }
+        }
+
+        const ext = getExtension(path)
+        const comment = getCommentPrefix(ext)
+        const lang = getLanguageTag(ext)
+        const fence = content.includes("```") ? "`".repeat(4) : "`".repeat(3)
+
+        context += `${fence}${lang}
+${comment} ./${path}
+${content}
+${fence}
+
+`
+      }
+
+      // Append instruction template
+      context += `
+---
+这是目前的代码结构，之后你输出新代码也需要遵循这样的格式
+\`\`\`ts
+// （第一行注释表明文件位置）
+console.log("1") // 之后则是代码正文
+\`\`\`
+只要修改过的文件都需要包含完整代码以覆盖
+所以，为了方便维护和编写，可以多拆文件多运用模块化
+---
+对于markdown文本，或者需要内部使用 "\`\`\`" 这种模式的文本，请使用 4个 "\`" 作为代码块的分隔符。避免代码块内部出现连续三个反引号冲突的情况。
+例如：
+\`\`\`\`markdown
+# 你好
+\`\`\`python
+print("hello world")
+\`\`\`
+\`\`\`\`
+---
+同时，为了错误防止截断问题，请在确认当次任务，所有文件修改完成之后以 \`[所有修改已完成]\` 表明任务结束。
+---`
+
+      return context.trim()
+    }
+
+    // ==================== Patch Parser ====================
+
+    function parsePatchText(text) {
+      const patches = []
+      const seenPaths = new Set()
+
+      // Match markdown code blocks with optional language
+      const codeBlockRegex = /(\`\`\`\`|\`\`\`)(\w*)\n([\s\S]*?)\n(\1)/g
+      let match
+
+      while ((match = codeBlockRegex.exec(text)) !== null) {
+        const lang = match[2]
+        const content = match[3]
+        const lines = content.split('\n')
+
+        if (lines.length === 0) continue
+
+        const firstLine = lines[0].trim()
+        let path = null
+        let commentPrefix = null
+
+        if (firstLine.startsWith('//')) {
+          path = firstLine.substring(2).trim()
+          commentPrefix = '//'
+        } else if (firstLine.startsWith('#')) {
+          path = firstLine.substring(1).trim()
+          commentPrefix = '#'
+        }
+
+        if (!path) continue
+
+        // Remove leading ./ if present
+        if (path.startsWith('./')) path = path.substring(2)
+
+        const newContent = lines.slice(1).join('\n')
+
+        // If same file appears multiple times, last one wins
+        const existingIndex = patches.findIndex(p => p.path === path)
+        if (existingIndex >= 0) {
+          patches[existingIndex] = { path, newContent, originalContent: '', strategy: 'full_replace' }
+        } else {
+          patches.push({ path, newContent, originalContent: '', strategy: 'full_replace' })
+        }
+      }
+
+      return patches
+    }
+
+    // ==================== Components ====================
+
+    function FileTreeItem({ item, depth = 0 }) {
+      const { selectedPaths, expandedDirs, toggleSelected, toggleExpanded, searchQuery } = useStore()
+      const isExpanded = expandedDirs.has(item.path)
+      const isSelected = selectedPaths.has(item.path)
+      const isDir = item.kind === 'directory'
+
+      // Filter by search
+      if (searchQuery && !isDir) {
+        if (!item.path.toLowerCase().includes(searchQuery.toLowerCase())) return null
+      }
+
+      const paddingLeft = depth * 16 + 8
+
+      return (
+        <div>
+          <div
+            className={`file-tree-item flex items-center gap-1 py-1 px-2 rounded ${isSelected ? 'selected' : ''} `}
+            style={{ paddingLeft: `${paddingLeft} px` }}
+            onClick={() => isDir ? toggleExpanded(item.path) : toggleSelected(item.path)}
+          >
+            {isDir && (
+              <span onClick={(e) => { e.stopPropagation(); toggleExpanded(item.path) }}>
+                {isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+              </span>
+            )}
+            {!isDir && <span className="w-3.5" />}
+            {isDir ? <Folder size={14} className="text-yellow-500" /> : <FileText size={14} className="text-blue-400" />}
+            <span className={`text-sm ${isDir ? 'font-medium' : ''} truncate`}>{item.name}</span>
+            {isSelected && !isDir && <Check size={12} className="text-green-400 ml-auto" />}
+          </div>
+          {isDir && isExpanded && item.children && (
+            <div>
+              {item.children.map(child => (
+                <FileTreeItem key={child.path} item={child} depth={depth + 1} />
+              ))}
+            </div>
+          )}
+        </div>
+      )
+    }
+
+    function FileTreePanel() {
+      const { dirHandle, fileTree, selectedPaths, searchQuery, setSearchQuery, selectAll, clearSelection } = useStore()
+
+      const getAllFilePaths = (items) => {
+        const paths = []
+        const traverse = (items) => {
+          for (const item of items) {
+            if (item.kind === 'file') paths.push(item.path)
+            else if (item.children) traverse(item.children)
+          }
+        }
+        traverse(items)
+        return paths
+      }
+
+      const allPaths = getAllFilePaths(fileTree)
+      const allSelected = allPaths.length > 0 && allPaths.every(p => selectedPaths.has(p))
+
+      return (
+        <div className="flex flex-col h-full bg-base-200 rounded-lg">
+          <div className="p-3 border-b border-base-300">
+            <div className="flex items-center justify-between mb-2">
+              <h3 className="font-bold text-sm flex items-center gap-2">
+                <FolderOpen size={16} />
+                File Tree
+              </h3>
+              <span className="text-xs text-gray-400">{selectedPaths.size} selected</span>
+            </div>
+            <div className="flex gap-2 mb-2">
+              <button className="btn btn-xs btn-primary" onClick={selectDirectory}>
+                <FolderOpen size={12} /> Open Folder
+              </button>
+              {dirHandle && (
+                <button className="btn btn-xs btn-ghost" onClick={() => useStore.getState().reset()}>
+                  <Trash2 size={12} /> Reset
+                </button>
+              )}
+            </div>
+            {dirHandle && (
+              <div className="flex gap-1">
+                <div className="relative flex-1">
+                  <Search size={12} className="absolute left-2 top-1/2 -translate-y-1/2 text-gray-400" />
+                  <input
+                    type="text"
+                    placeholder="Search files..."
+                    className="input input-xs input-bordered w-full pl-7"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                  />
+                </div>
+                <button
+                  className="btn btn-xs btn-ghost"
+                  onClick={() => allSelected ? clearSelection() : selectAll(allPaths)}
+                >
+                  {allSelected ? 'Deselect All' : 'Select All'}
+                </button>
+              </div>
+            )}
+          </div>
+          <div className="flex-1 overflow-y-auto scrollbar-thin p-2">
+            {!dirHandle ? (
+              <div className="text-center text-gray-500 py-8 text-sm">
+                <FolderOpen size={32} className="mx-auto mb-2 opacity-50" />
+                <p>Click "Open Folder" to start</p>
+              </div>
+            ) : fileTree.length === 0 ? (
+              <div className="text-center text-gray-500 py-8 text-sm">Empty directory</div>
+            ) : (
+              fileTree.map(item => <FileTreeItem key={item.path} item={item} />)
+            )}
+          </div>
+        </div>
+      )
+    }
+
+    function ContextPanel() {
+      const { selectedPaths, activeTab, setActiveTab } = useStore()
+      const [context, setContext] = React.useState('')
+      const [copied, setCopied] = React.useState(false)
+
+      React.useEffect(() => {
+        if (activeTab === 'context') {
+          generateContext().then(ctx => setContext(ctx))
+        }
+      }, [activeTab, selectedPaths])
+
+      const copyToClipboard = async () => {
+        await navigator.clipboard.writeText(context)
+        setCopied(true)
+        setTimeout(() => setCopied(false), 2000)
+      }
+
+      return (
+        <div className="flex flex-col h-full bg-base-200 rounded-lg">
+          <div className="flex border-b border-base-300">
+            <button
+              className={`flex-1 py-2 text-sm font-medium ${activeTab === 'context' ? 'tab-active' : 'tab-inactive'} `}
+              onClick={() => setActiveTab('context')}
+            >
+              Context Prompt
+            </button>
+            <button
+              className={`flex-1 py-2 text-sm font-medium ${activeTab === 'patch' ? 'tab-active' : 'tab-inactive'} `}
+              onClick={() => setActiveTab('patch')}
+            >
+              Patch Input
+            </button>
+          </div>
+
+          {activeTab === 'context' ? (
+            <div className="flex flex-col flex-1 p-3">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-xs text-gray-400">
+                  {selectedPaths.size} files selected
+                </span>
+                <button
+                  className="btn btn-xs btn-primary"
+                  onClick={copyToClipboard}
+                  disabled={!context}
+                >
+                  {copied ? <><Check size={12} /> Copied!</> : <><Copy size={12} /> Copy</>}
+                </button>
+              </div>
+              <textarea
+                className="flex-1 textarea textarea-bordered font-mono text-xs resize-none scrollbar-thin w-full outline-none"
+                value={context}
+                readOnly
+                placeholder={selectedPaths.size === 0 ? "Select files from the left panel..." : "Generating context..."}
+              />
+            </div>
+          ) : (
+            <PatchInputPanel />
+          )}
+        </div>
+      )
+    }
+
+    function PatchInputPanel() {
+      const { patchText, setPatchText, setParsedPatches, dirHandle, setError } = useStore()
+      const [parsing, setParsing] = React.useState(false)
+
+      const handleParse = async () => {
+        setParsing(true)
+        setError(null)
+
+        try {
+          const patches = parsePatchText(patchText)
+
+          // Load original content for each patch
+          for (const patch of patches) {
+            try {
+              const fileHandle = await getFileHandleByPath(dirHandle, patch.path)
+              patch.originalContent = await readFileContent(fileHandle)
+            } catch (err) {
+              patch.originalContent = '' // New file
+            }
+          }
+
+          setParsedPatches(patches)
+
+          if (patches.length === 0) {
+            setError('No valid patches found. Make sure AI output uses markdown code blocks with // or # path comments.')
+          }
+        } catch (err) {
+          setError('Parse error: ' + err.message)
+        } finally {
+          setParsing(false)
+        }
+      }
+
+      return (
+        <div className="flex flex-col flex-1 p-3">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-xs text-gray-400">Paste AI response here</span>
+            <button
+              className="btn btn-xs btn-primary"
+              onClick={handleParse}
+              disabled={!patchText.trim() || parsing}
+            >
+              {parsing ? 'Parsing...' : <><Play size={12} /> Parse</>}
+            </button>
+          </div>
+          <textarea
+            className="flex-1 textarea textarea-bordered font-mono text-xs resize-none scrollbar-thin w-full outline-none"
+            value={patchText}
+            onChange={(e) => setPatchText(e.target.value)}
+            placeholder={`Paste AI response with markdown code blocks...
+
+      Example:
+      \`\`\`typescript
+// src/utils.ts
+export function add(a: number, b: number) {
+  return a + b;
+}
+\`\`\``}
+          />
+        </div >
+      )
+    }
+
+    function DiffViewerPanel() {
+      const { parsedPatches, dirHandle, appliedPatches, setAppliedPatch, setError, setParsedPatches } = useStore()
+      const [activePatch, setActivePatch] = React.useState(0)
+      const [editors, setEditors] = React.useState([])
+      const containerRefs = React.useRef([])
+
+      // Initialize Monaco editors
+      React.useEffect(() => {
+        if (parsedPatches.length === 0) return
+
+        // Configure Monaco
+        require.config({ paths: { 'vs': 'https://cdn.jsdelivr.net/npm/monaco-editor@0.52.2/min/vs' } })
+
+        require(['vs/editor/editor.main'], () => {
+          // Dispose old editors
+          editors.forEach(e => e?.dispose())
+
+          const newEditors = []
+          parsedPatches.forEach((patch, index) => {
+            const container = containerRefs.current[index]
+            if (!container) return
+
+            // Clear container
+            container.innerHTML = ''
+
+            const ext = getExtension(patch.path)
+            const lang = getLanguageTag(ext)
+
+            const editor = monaco.editor.createDiffEditor(container, {
+              readOnly: false,
+              originalEditable: false,
+              renderSideBySide: true,
+              wordWrap: 'on',
+              automaticLayout: true,
+              theme: 'vs-dark',
+              minimap: { enabled: false },
+              scrollBeyondLastLine: false,
+              fontSize: 12,
+            })
+
+            editor.setModel({
+              original: monaco.editor.createModel(patch.originalContent, lang),
+              modified: monaco.editor.createModel(patch.newContent, lang)
+            })
+
+            newEditors.push(editor)
+          })
+
+          setEditors(newEditors)
+        })
+
+        return () => {
+          editors.forEach(e => e?.dispose())
+        }
+      }, [parsedPatches])
+
+      const applyPatch = async (index) => {
+        const patch = parsedPatches[index]
+        if (!patch || !dirHandle) return
+
+        try {
+          // Get modified content from editor
+          const editor = editors[index]
+          const modifiedModel = editor?.getModifiedEditor()?.getModel()
+          const finalContent = modifiedModel ? modifiedModel.getValue() : patch.newContent
+
+          await writeFileContent(dirHandle, patch.path, finalContent)
+          setAppliedPatch(patch.path)
+
+          // Update patch in list
+          const newPatches = [...parsedPatches]
+          newPatches[index] = { ...patch, newContent: finalContent, applied: true }
+          setParsedPatches(newPatches)
+        } catch (err) {
+          if (err.name === 'NotAllowedError') {
+            setError('Permission denied. Please re-select the directory.')
+          } else {
+            setError(`Failed to write ${patch.path}: ${err.message}`)
+          }
+        }
+      }
+
+      const applyAllPatches = async () => {
+        for (let i = 0; i < parsedPatches.length; i++) {
+          if (!appliedPatches.has(parsedPatches[i].path)) {
+            await applyPatch(i)
+          }
+        }
+      }
+
+      if (parsedPatches.length === 0) {
+        return (
+          <div className="flex flex-col h-full bg-base-200 rounded-lg p-4">
+            <h3 className="font-bold text-sm flex items-center gap-2 mb-4">
+              <FileCode size={16} />
+              Diff Review
+            </h3>
+            <div className="flex-1 flex items-center justify-center text-gray-500 text-sm">
+              <div className="text-center">
+                <FileText size={32} className="mx-auto mb-2 opacity-50" />
+                <p>Parse a patch to see diffs</p>
+              </div>
+            </div>
+          </div>
+        )
+      }
+
+      return (
+        <div className="flex flex-col h-full bg-base-200 rounded-lg">
+          <div className="p-3 border-b border-base-300">
+            <div className="flex items-center justify-between">
+              <h3 className="font-bold text-sm flex items-center gap-2">
+                <FileCode size={16} />
+                Diff Review
+              </h3>
+              <div className="flex gap-2">
+                <span className="text-xs text-gray-400 self-center">
+                  {appliedPatches.size}/{parsedPatches.length} applied
+                </span>
+                <button
+                  className="btn btn-xs btn-success"
+                  onClick={applyAllPatches}
+                  disabled={appliedPatches.size === parsedPatches.length}
+                >
+                  <Save size={12} /> Apply All
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex-1 overflow-y-auto scrollbar-thin p-3 space-y-4">
+            {parsedPatches.map((patch, index) => (
+              <div key={patch.path} className="border border-base-300 rounded-lg overflow-hidden">
+                <div className="flex items-center justify-between p-2 bg-base-300">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-mono">{patch.path}</span>
+                    {appliedPatches.has(patch.path) && (
+                      <span className="badge badge-success badge-xs">Applied</span>
+                    )}
+                    {patch.originalContent === '' && (
+                      <span className="badge badge-info badge-xs">New File</span>
+                    )}
+                  </div>
+                  <button
+                    className="btn btn-xs btn-primary"
+                    onClick={() => applyPatch(index)}
+                    disabled={appliedPatches.has(patch.path)}
+                  >
+                    {appliedPatches.has(patch.path) ? <><Check size={12} /> Done</> : <><Save size={12} /> Apply</>}
+                  </button>
+                </div>
+                <div
+                  ref={el => containerRefs.current[index] = el}
+                  className="h-64"
+                />
+              </div>
+            ))}
+          </div>
+        </div>
+      )
+    }
+
+    function ErrorToast() {
+      const { error, clearError } = useStore()
+
+      if (!error) return null
+
+      return (
+        <div className="toast toast-top toast-center z-50">
+          <div className="alert alert-error shadow-lg">
+            <AlertCircle size={16} />
+            <span className="text-sm">{error}</span>
+            <button className="btn btn-xs btn-ghost" onClick={clearError}>
+              <X size={14} />
+            </button>
+          </div>
+        </div>
+      )
+    }
+
+    function App() {
+      return (
+        <div className="h-screen flex flex-col bg-base-100 text-base-content">
+          <header className="p-3 border-b border-base-300 flex items-center justify-between">
+            <h1 className="text-lg font-bold flex items-center gap-2">
+              <FileCode size={20} className="text-primary" />
+              AI Context Prompt Tool
+            </h1>
+            <div className="text-xs text-gray-400">
+              Select files → Generate Context → Get AI Patch → Review & Apply
+            </div>
+          </header>
+
+          <main className="flex-1 grid grid-cols-12 gap-3 p-3 min-h-0">
+            <div className="col-span-3 min-h-0">
+              <FileTreePanel />
+            </div>
+            <div className="col-span-4 min-h-0">
+              <ContextPanel />
+            </div>
+            <div className="col-span-5 min-h-0">
+              <DiffViewerPanel />
+            </div>
+          </main>
+
+          <ErrorToast />
+        </div>
+      )
+    }
+
+    createRoot(document.getElementById("root")).render(<App />)
+  </script>
+</body>
+
+</html>
