@@ -724,7 +724,7 @@
         for (const item of tree) {
           if (item.kind === 'directory') rootExpanded.add(item.path)
         }
-        set({ expandedDirs: rootExpanded })
+        useStore.setState({ expandedDirs: rootExpanded })
         // Use store directly to set expandedDirs
         const currentExpanded = new Set(useStore.getState().expandedDirs)
         for (const p of rootExpanded) currentExpanded.add(p)
