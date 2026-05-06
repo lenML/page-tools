@@ -1,0 +1,1558 @@
+<!DOCTYPE html>
+<html data-theme="dark">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI Context Prompt Tool v2</title>
+  <script type="importmap">
+    {
+      "imports": {
+        "react": "https://esm.sh/react@19.2.4",
+        "react/jsx-runtime": "https://esm.sh/react@19.2.4/jsx-runtime",
+        "react-dom/client": "https://esm.sh/react-dom@19.2.4/client",
+        "lucide-react": "https://esm.sh/lucide-react?external=react",
+        "zustand": "https://esm.sh/zustand?external=react"
+      }
+    }
+  </script>
+  <script type="module" src="https://esm.sh/tsx"></script>
+  <link href="https://cdn.jsdelivr.net/npm/daisyui@5" rel="stylesheet" type="text/css" />
+  <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+  <script src="https://cdn.jsdelivr.net/npm/monaco-editor@0.52.2/min/vs/loader.js"></script>
+  <style>
+    body {
+      margin: 0;
+      overflow: hidden;
+    }
+
+    [data-theme="dark"] {
+      --color-base-100: #1a1a1e;
+      --color-base-200: #141417;
+      --color-base-300: #2a2a30;
+      --color-base-content: #d4d4d8;
+    }
+
+    .file-tree-item {
+      cursor: pointer;
+      user-select: none;
+      transition: background-color 0.1s;
+    }
+
+    .file-tree-item:hover {
+      background-color: rgba(255, 255, 255, 0.06);
+    }
+
+    .file-tree-item.selected {
+      background-color: rgba(59, 130, 246, 0.18);
+    }
+
+    .scrollbar-thin::-webkit-scrollbar {
+      width: 6px;
+    }
+
+    .scrollbar-thin::-webkit-scrollbar-track {
+      background: transparent;
+    }
+
+    .scrollbar-thin::-webkit-scrollbar-thumb {
+      background: rgba(255, 255, 255, 0.12);
+      border-radius: 3px;
+    }
+
+    .scrollbar-thin::-webkit-scrollbar-thumb:hover {
+      background: rgba(255, 255, 255, 0.22);
+    }
+
+    .tab-active {
+      border-bottom: 2px solid #3b82f6;
+      color: #3b82f6;
+    }
+
+    .tab-inactive {
+      border-bottom: 2px solid transparent;
+      color: #6b7280;
+    }
+
+    .tab-inactive:hover {
+      color: #9ca3af;
+    }
+
+    .tree-indent {
+      position: relative;
+    }
+
+    .tree-indent::before {
+      content: '';
+      position: absolute;
+      left: 7px;
+      top: 0;
+      bottom: 0;
+      width: 1px;
+      background: rgba(255, 255, 255, 0.06);
+    }
+
+    .badge-write {
+      background: rgba(59, 130, 246, 0.2);
+      color: #60a5fa;
+      border: 1px solid rgba(59, 130, 246, 0.3);
+    }
+
+    .badge-edit {
+      background: rgba(245, 158, 11, 0.2);
+      color: #fbbf24;
+      border: 1px solid rgba(245, 158, 11, 0.3);
+    }
+
+    .badge-delete {
+      background: rgba(239, 68, 68, 0.2);
+      color: #f87171;
+      border: 1px solid rgba(239, 68, 68, 0.3);
+    }
+
+    .badge-move {
+      background: rgba(168, 85, 247, 0.2);
+      color: #c084fc;
+      border: 1px solid rgba(168, 85, 247, 0.3);
+    }
+
+    .stat-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 2px 8px;
+      border-radius: 9999px;
+      font-size: 11px;
+      font-weight: 500;
+    }
+
+    .patch-card {
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 8px;
+      overflow: hidden;
+      background: rgba(255, 255, 255, 0.02);
+      transition: border-color 0.2s;
+    }
+
+    .patch-card:hover {
+      border-color: rgba(255, 255, 255, 0.14);
+    }
+
+    .patch-card-header {
+      padding: 10px 14px;
+      background: rgba(255, 255, 255, 0.03);
+      border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .patch-card-applied {
+      border-color: rgba(34, 197, 94, 0.3);
+    }
+
+    .patch-card-applied .patch-card-header {
+      background: rgba(34, 197, 94, 0.05);
+    }
+
+    .patch-card-test-fail {
+      border-color: rgba(239, 68, 68, 0.3);
+    }
+
+    .patch-card-test-fail .patch-card-header {
+      background: rgba(239, 68, 68, 0.05);
+    }
+
+    .patch-card-test-pass {
+      border-color: rgba(34, 197, 94, 0.2);
+    }
+
+    .test-banner {
+      padding: 10px 14px;
+      border-radius: 6px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 8px;
+      animation: bannerSlide 0.25s ease-out;
+    }
+
+    .test-banner-pass {
+      background: rgba(34, 197, 94, 0.1);
+      border: 1px solid rgba(34, 197, 94, 0.3);
+      color: #4ade80;
+    }
+
+    .test-banner-fail {
+      background: rgba(239, 68, 68, 0.1);
+      border: 1px solid rgba(239, 68, 68, 0.3);
+      color: #f87171;
+    }
+
+    @keyframes bannerSlide {
+      from {
+        opacity: 0;
+        transform: translateY(-6px);
+      }
+
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    .feedback-box {
+      background: rgba(239, 68, 68, 0.04);
+      border: 1px solid rgba(239, 68, 68, 0.18);
+      border-radius: 8px;
+      margin-bottom: 10px;
+      overflow: hidden;
+      animation: bannerSlide 0.25s ease-out;
+    }
+
+    .feedback-box-header {
+      padding: 10px 14px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid rgba(239, 68, 68, 0.12);
+    }
+
+    .feedback-box-body {
+      padding: 12px 14px;
+    }
+
+    .feedback-box-body pre {
+      white-space: pre-wrap;
+      word-break: break-all;
+      font-size: 11px;
+      line-height: 1.5;
+      color: #d4d4d8;
+      max-height: 240px;
+      overflow-y: auto;
+    }
+
+    .feedback-box-body pre::-webkit-scrollbar {
+      width: 5px;
+    }
+
+    .feedback-box-body pre::-webkit-scrollbar-track {
+      background: transparent;
+    }
+
+    .feedback-box-body pre::-webkit-scrollbar-thumb {
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 3px;
+    }
+
+    .search-preview {
+      font-size: 11px;
+    }
+
+    .search-preview .search-label {
+      color: #f87171;
+      font-weight: 600;
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .search-preview .replace-label {
+      color: #4ade80;
+      font-weight: 600;
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .search-preview pre {
+      white-space: pre-wrap;
+      word-break: break-all;
+      border-radius: 4px;
+      padding: 6px 8px;
+      margin: 4px 0;
+      font-size: 11px;
+      line-height: 1.45;
+    }
+
+    .search-preview .search-pre {
+      background: rgba(239, 68, 68, 0.08);
+      border: 1px solid rgba(239, 68, 68, 0.15);
+      color: #fca5a5;
+    }
+
+    .search-preview .replace-pre {
+      background: rgba(34, 197, 94, 0.08);
+      border: 1px solid rgba(34, 197, 94, 0.15);
+      color: #86efac;
+    }
+
+    .search-preview .match-ok .search-pre {
+      background: rgba(34, 197, 94, 0.06);
+      border-color: rgba(34, 197, 94, 0.2);
+      color: #86efac;
+    }
+
+    .btn-test {
+      background: rgba(168, 85, 247, 0.2);
+      color: #c084fc;
+      border: 1px solid rgba(168, 85, 247, 0.3);
+    }
+
+    .btn-test:hover {
+      background: rgba(168, 85, 247, 0.3);
+      border-color: rgba(168, 85, 247, 0.5);
+    }
+
+    .btn-test:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+    }
+
+    .same-file-hint {
+      background: rgba(245, 158, 11, 0.08);
+      border: 1px solid rgba(245, 158, 11, 0.2);
+      color: #fbbf24;
+      padding: 6px 12px;
+      border-radius: 6px;
+      font-size: 11px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-bottom: 8px;
+    }
+
+    .gitignore-badge {
+      background: rgba(34, 197, 94, 0.12);
+      color: #4ade80;
+      border: 1px solid rgba(34, 197, 94, 0.25);
+      padding: 1px 6px;
+      border-radius: 4px;
+      font-size: 10px;
+      font-weight: 500;
+      display: inline-flex;
+      align-items: center;
+      gap: 3px;
+    }
+  </style>
+  <base target="_blank">
+</head>
+
+<body>
+  <div id="root"></div>
+
+  <script type="text/babel">
+    import * as React from "react";
+    window.React = React;
+  </script>
+
+  <script type="text/babel">
+    import { createRoot } from "react-dom/client"
+    import {
+      FolderOpen, FileText, Check, X, ChevronRight, ChevronDown,
+      Search, Copy, Play, Save, FileCode, Folder, Trash2, AlertCircle,
+      ArrowRight, Plus, Pencil, AlertTriangle, Move, FilePen, FilePlus,
+      ShieldCheck, ShieldAlert, FlaskConical, ClipboardCopy, Lock, Layers,
+      GitBranch, FileX2
+    } from "lucide-react"
+    import { create } from "zustand"
+
+    // ==================== Utility Functions ====================
+
+    const EXCLUDED_DIRS = new Set(['.git', 'node_modules', '.next', 'dist', 'build', '.vscode', '.idea', '__pycache__', 'venv', '.venv'])
+
+    const getCommentPrefix = (ext) => {
+      const slash = new Set(['js', 'ts', 'jsx', 'tsx', 'java', 'c', 'cpp', 'h', 'hpp', 'cs', 'go', 'rs', 'swift', 'kt', 'php', 'css', 'scss', 'sass', 'less', 'json', 'html', 'xml', 'yaml', 'yml', 'ini', 'toml'])
+      const hash = new Set(['py', 'sh', 'bash', 'zsh', 'fish', 'rb', 'pl', 'r', 'sql', 'dockerfile', 'makefile', 'cmake'])
+      if (slash.has(ext)) return '//'
+      if (hash.has(ext)) return '#'
+      return '#'
+    }
+
+    const getLanguageTag = (ext) => {
+      const map = { 'js': 'javascript', 'ts': 'typescript', 'jsx': 'jsx', 'tsx': 'tsx', 'py': 'python', 'java': 'java', 'c': 'c', 'cpp': 'cpp', 'h': 'c', 'hpp': 'cpp', 'cs': 'csharp', 'go': 'go', 'rs': 'rust', 'swift': 'swift', 'kt': 'kotlin', 'php': 'php', 'rb': 'ruby', 'sh': 'bash', 'bash': 'bash', 'zsh': 'bash', 'fish': 'bash', 'sql': 'sql', 'html': 'html', 'css': 'css', 'scss': 'scss', 'sass': 'sass', 'less': 'less', 'json': 'json', 'xml': 'xml', 'yaml': 'yaml', 'yml': 'yaml', 'md': 'markdown', 'dockerfile': 'dockerfile', 'makefile': 'makefile', 'cmake': 'cmake', 'pl': 'perl', 'r': 'r', 'ini': 'ini', 'toml': 'toml', 'txt': 'text' }
+      return map[ext] || ext || 'text'
+    }
+
+    const getExtension = (filename) => {
+      const parts = filename.split('.')
+      return parts.length > 1 ? parts[parts.length - 1].toLowerCase() : ''
+    }
+
+    const normalizePath = (path) => {
+      if (!path) return ''
+      if (path.startsWith('./')) return path.substring(2)
+      return path
+    }
+
+    const normalizeLineEndings = (str) => {
+      if (!str) return str
+      return str.replace(/\r\n/g, '\n').replace(/\r/g, '\n')
+    }
+
+    // ==================== .gitignore Support ====================
+
+    function parseGitignore(text) {
+      const patterns = []
+      for (let line of text.split('\n')) {
+        line = line.trimEnd()
+        if (!line || line.startsWith('#')) continue
+
+        const negated = line.startsWith('!')
+        if (negated) line = line.substring(1)
+
+        const dirOnly = line.endsWith('/')
+        if (dirOnly) line = line.slice(0, -1)
+
+        const anchored = line.startsWith('/')
+        if (anchored) line = line.substring(1)
+
+        const hasSlash = line.includes('/')
+
+        patterns.push({ raw: line, negated, dirOnly, anchored, hasSlash })
+      }
+      return patterns
+    }
+
+    function globToRegex(pattern) {
+      let regex = ''
+      let i = 0
+      while (i < pattern.length) {
+        const c = pattern[i]
+        if (c === '*') {
+          if (i + 1 < pattern.length && pattern[i + 1] === '*') {
+            if (i + 2 < pattern.length && pattern[i + 2] === '/') {
+              // **/ — zero or more path components
+              regex += '(?:.+/)?'
+              i += 3
+            } else {
+              // ** — match everything including /
+              regex += '.*'
+              i += 2
+            }
+          } else {
+            // * — match anything except /
+            regex += '[^/]*'
+            i++
+          }
+        } else if (c === '?') {
+          regex += '[^/]'
+          i++
+        } else if (c === '[') {
+          let j = i + 1
+          let cls = '['
+          if (j < pattern.length && pattern[j] === '!') { cls += '^'; j++ }
+          else if (j < pattern.length && pattern[j] === ']') { cls += ']'; j++ }
+          while (j < pattern.length && pattern[j] !== ']') { cls += pattern[j]; j++ }
+          cls += ']'
+          regex += cls
+          i = j + 1
+        } else if ('.+^${}()|\\'.includes(c)) {
+          regex += '\\' + c
+          i++
+        } else {
+          regex += c
+          i++
+        }
+      }
+      return regex
+    }
+
+    function isIgnoredByGitignore(relPath, isDir, patterns) {
+      const parts = relPath.split('/')
+      const basename = parts[parts.length - 1]
+      let result = false
+
+      for (const p of patterns) {
+        if (p.dirOnly && !isDir) continue
+
+        let matched = false
+        try {
+          const re = globToRegex(p.raw)
+          if (p.anchored || p.hasSlash) {
+            // Match against full relative path from root
+            matched = new RegExp('^' + re + '$').test(relPath)
+            // For directories, also match if pattern is a prefix
+            if (!matched && isDir) {
+              matched = new RegExp('^' + re + '/').test(relPath + '/')
+            }
+          } else {
+            // Match against basename
+            matched = new RegExp('^' + re + '$').test(basename)
+          }
+        } catch { /* skip invalid patterns */ }
+
+        if (matched) result = !p.negated
+      }
+      return result
+    }
+
+    // ==================== Write Lock ====================
+
+    const writeLockQueues = new Map()
+
+    async function withWriteLock(filePaths, fn) {
+      const paths = [...new Set(filePaths.map(normalizePath).filter(Boolean))].sort()
+      const releaseFns = []
+      for (const p of paths) {
+        if (!writeLockQueues.has(p)) writeLockQueues.set(p, Promise.resolve())
+        const prev = writeLockQueues.get(p)
+        let resolveNext
+        const nextPromise = new Promise(r => resolveNext = r)
+        writeLockQueues.set(p, nextPromise)
+        releaseFns.push(resolveNext)
+        await prev
+      }
+      try { return await fn() }
+      finally { for (let i = releaseFns.length - 1; i >= 0; i--) releaseFns[i]() }
+    }
+
+    // ==================== YAML / Search/Replace ====================
+
+    function parseSimpleYAML(text) {
+      const result = {}
+      for (const line of text.split('\n')) {
+        const trimmed = line.trim()
+        if (!trimmed || trimmed.startsWith('#')) continue
+        const ci = trimmed.indexOf(':')
+        if (ci === -1) continue
+        const key = trimmed.substring(0, ci).trim()
+        let value = trimmed.substring(ci + 1).trim()
+        if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) value = value.slice(1, -1)
+        if (value === 'true') result[key] = true
+        else if (value === 'false') result[key] = false
+        else result[key] = value
+      }
+      return result
+    }
+
+    function parseSearchReplace(text) {
+      text = normalizeLineEndings(text)
+      const blocks = []
+      const lines = text.split('\n')
+      let state = 'idle', searchLines = [], replaceLines = []
+      for (let i = 0; i < lines.length; i++) {
+        const trimmed = lines[i].trim()
+        if (trimmed === '<<<<<<< SEARCH') { state = 'search'; searchLines = []; replaceLines = [] }
+        else if (trimmed === '=======') { if (state === 'search') state = 'replace' }
+        else if (trimmed === '>>>>>>> REPLACE') { if (state === 'replace') { state = 'idle'; blocks.push({ search: searchLines.join('\n'), replace: replaceLines.join('\n') }) } }
+        else if (state === 'search') searchLines.push(lines[i])
+        else if (state === 'replace') replaceLines.push(lines[i])
+      }
+      return blocks
+    }
+
+    function applyEdits(originalContent, searchBlocks, replaceAll) {
+      let result = normalizeLineEndings(originalContent)
+      const errors = []
+      for (const block of searchBlocks) {
+        const search = normalizeLineEndings(block.search)
+        const replace = normalizeLineEndings(block.replace)
+        if (!result.includes(search)) {
+          errors.push(`SEARCH text not found:\n${search.substring(0, 120)}...`)
+          continue
+        }
+        if (replaceAll) { result = result.split(search).join(replace) }
+        else { const idx = result.indexOf(search); result = result.substring(0, idx) + replace + result.substring(idx + search.length) }
+      }
+      return { result, errors }
+    }
+
+    // ==================== Monaco ====================
+
+    let monacoLoadPromise = null
+    function loadMonaco() {
+      if (monacoLoadPromise) return monacoLoadPromise
+      monacoLoadPromise = new Promise((resolve) => {
+        require.config({ paths: { 'vs': 'https://cdn.jsdelivr.net/npm/monaco-editor@0.52.2/min/vs' } })
+        require(['vs/editor/editor.main'], () => {
+          monaco.editor.defineTheme('custom-dark', {
+            base: 'vs-dark', inherit: true, rules: [],
+            colors: {
+              'editor.background': '#141417', 'editorWidget.background': '#1a1a1e',
+              'editorWidget.border': '#2a2a30', 'diffEditor.insertedTextBackground': '#1a3a1a',
+              'diffEditor.removedTextBackground': '#3a1a1a', 'editorGutter.background': '#141417',
+              'editor.lineHighlightBackground': '#1a1a1e',
+            }
+          })
+          resolve(monaco)
+        })
+      })
+      return monacoLoadPromise
+    }
+
+    function MonacoEditor({ value, onChange, readOnly = false, language = 'plaintext' }) {
+      const containerRef = React.useRef(null)
+      const editorRef = React.useRef(null)
+      const isUpdatingRef = React.useRef(false)
+      const valueRef = React.useRef(value)
+      valueRef.current = value
+
+      React.useEffect(() => {
+        let disposed = false
+        loadMonaco().then(() => {
+          if (disposed || !containerRef.current) return
+          const editor = monaco.editor.create(containerRef.current, {
+            value: valueRef.current || '', language, readOnly, theme: 'custom-dark',
+            minimap: { enabled: false }, scrollBeyondLastLine: false, fontSize: 12,
+            wordWrap: 'on', automaticLayout: true, lineNumbers: 'on', renderLineHighlight: 'none',
+            scrollbar: { verticalScrollbarSize: 6, horizontalScrollbarSize: 6 },
+            padding: { top: 8, bottom: 8 },
+          })
+          editorRef.current = editor
+          if (onChange) editor.onDidChangeModelContent(() => { if (!isUpdatingRef.current) onChange(editor.getValue()) })
+        })
+        return () => { disposed = true; editorRef.current?.dispose(); editorRef.current = null }
+      }, [])
+
+      React.useEffect(() => {
+        const editor = editorRef.current
+        if (editor && value !== undefined) {
+          const current = editor.getValue()
+          if (current !== value) {
+            isUpdatingRef.current = true
+            const st = editor.getScrollTop(), sl = editor.getScrollLeft()
+            editor.setValue(value || '')
+            editor.setScrollPosition({ scrollTop: st, scrollLeft: sl })
+            isUpdatingRef.current = false
+          }
+        }
+      }, [value])
+
+      return <div ref={containerRef} className="h-full w-full" />
+    }
+
+    // ==================== Store ====================
+
+    const useStore = create((set, get) => ({
+      dirHandle: null,
+      fileTree: [],
+      selectedPaths: new Set(),
+      expandedDirs: new Set(),
+      searchQuery: '',
+      fileContents: new Map(),
+      activeTab: 'context',
+      patchText: '',
+      parsedPatches: [],
+      appliedPatches: new Set(),
+      patchErrors: new Map(),
+      testResult: null,
+      gitignorePatterns: [],
+      hasGitignore: false,
+      error: null,
+
+      setDirHandle: (h) => set({ dirHandle: h }),
+      setFileTree: (t) => set({ fileTree: t }),
+      toggleSelected: (path) => {
+        const s = new Set(get().selectedPaths)
+        if (s.has(path)) s.delete(path); else s.add(path)
+        set({ selectedPaths: s })
+      },
+      selectAll: (paths) => {
+        // Collect all directory paths for expansion
+        const expandedDirs = new Set()
+        const collectDirs = (items) => {
+          for (const item of items) {
+            if (item.kind === 'directory') {
+              expandedDirs.add(item.path)
+              if (item.children) collectDirs(item.children)
+            }
+          }
+        }
+        collectDirs(get().fileTree)
+        set({ selectedPaths: new Set(paths), expandedDirs })
+      },
+      clearSelection: () => set({ selectedPaths: new Set() }),
+      toggleExpanded: (path) => {
+        const e = new Set(get().expandedDirs)
+        if (e.has(path)) e.delete(path); else e.add(path)
+        set({ expandedDirs: e })
+      },
+      setSearchQuery: (q) => set({ searchQuery: q }),
+      setFileContent: (path, content) => {
+        const c = new Map(get().fileContents); c.set(path, content); set({ fileContents: c })
+      },
+      setActiveTab: (tab) => set({ activeTab: tab }),
+      setPatchText: (text) => set({ patchText: text }),
+      setParsedPatches: (patches) => set({ parsedPatches: patches, appliedPatches: new Set(), patchErrors: new Map(), testResult: null }),
+      setAppliedPatch: (index) => {
+        const a = new Set(get().appliedPatches); a.add(index); set({ appliedPatches: a })
+      },
+      setPatchError: (index, error) => {
+        const e = new Map(get().patchErrors); e.set(index, error); set({ patchErrors: e })
+      },
+      clearPatchError: (index) => {
+        const e = new Map(get().patchErrors); e.delete(index); set({ patchErrors: e })
+      },
+      setTestResult: (result) => set({ testResult: result }),
+      setGitignore: (patterns, has) => set({ gitignorePatterns: patterns, hasGitignore: has }),
+      setError: (err) => set({ error: err }),
+      clearError: () => set({ error: null }),
+      reset: () => set({
+        dirHandle: null, fileTree: [], selectedPaths: new Set(), expandedDirs: new Set(),
+        searchQuery: '', fileContents: new Map(), patchText: '', parsedPatches: [],
+        appliedPatches: new Set(), patchErrors: new Map(), testResult: null,
+        gitignorePatterns: [], hasGitignore: false, error: null
+      })
+    }))
+
+    // ==================== File System ====================
+
+    async function selectDirectory() {
+      try {
+        const handle = await window.showDirectoryPicker()
+        const store = useStore.getState()
+        store.setDirHandle(handle); store.clearSelection(); store.setFileTree([]); store.setSearchQuery('')
+
+        // Read .gitignore if present
+        let gitignorePatterns = []
+        let hasGitignore = false
+        try {
+          const gih = await handle.getFileHandle('.gitignore')
+          const gif = await gih.getFile()
+          const gitext = await gif.text()
+          gitignorePatterns = parseGitignore(gitext)
+          hasGitignore = true
+        } catch { /* no .gitignore */ }
+        store.setGitignore(gitignorePatterns, hasGitignore)
+
+        const tree = await buildFileTree(handle, '', gitignorePatterns)
+        store.setFileTree(tree)
+        // Expand root level
+        const rootExpanded = new Set()
+        for (const item of tree) {
+          if (item.kind === 'directory') rootExpanded.add(item.path)
+        }
+        set({ expandedDirs: rootExpanded })
+        // Use store directly to set expandedDirs
+        const currentExpanded = new Set(useStore.getState().expandedDirs)
+        for (const p of rootExpanded) currentExpanded.add(p)
+        useStore.setState({ expandedDirs: currentExpanded })
+      } catch (err) {
+        if (err.name !== 'AbortError') useStore.getState().setError('Failed to open directory: ' + err.message)
+      }
+    }
+
+    async function buildFileTree(dirHandle, path, gitignorePatterns) {
+      const entries = []
+      for await (const [name, handle] of dirHandle.entries()) {
+        const childPath = path ? `${path}/${name}` : name
+
+        if (handle.kind === 'directory') {
+          // Check gitignore first
+          if (gitignorePatterns.length > 0 && isIgnoredByGitignore(childPath, true, gitignorePatterns)) continue
+          // Check hardcoded exclusions
+          if (EXCLUDED_DIRS.has(name)) continue
+
+          const children = await buildFileTree(handle, childPath, gitignorePatterns)
+          // Skip empty directories (no files underneath after filtering)
+          if (children.length === 0) continue
+
+          entries.push({ name, path: childPath, kind: 'directory', handle, children })
+        } else {
+          // Check gitignore
+          if (gitignorePatterns.length > 0 && isIgnoredByGitignore(childPath, false, gitignorePatterns)) continue
+
+          const file = await handle.getFile()
+
+          // Skip empty files (0 bytes)
+          if (file.size === 0) continue
+
+          // Skip binary/image/video
+          const mime = file.type
+          if (mime.startsWith('image/') || mime.startsWith('video/')) continue
+
+          entries.push({ name, path: childPath, kind: 'file', handle })
+        }
+      }
+      entries.sort((a, b) => {
+        if (a.kind !== b.kind) return a.kind === 'directory' ? -1 : 1
+        return a.name.localeCompare(b.name)
+      })
+      return entries
+    }
+
+    async function readFileContent(fileHandle) {
+      const file = await fileHandle.getFile()
+      return normalizeLineEndings(await file.text())
+    }
+
+    async function writeFileContent(dirHandle, rp, content) {
+      const parts = rp.split('/'); let cur = dirHandle
+      for (let i = 0; i < parts.length - 1; i++) cur = await cur.getDirectoryHandle(parts[i], { create: true })
+      const fh = await cur.getFileHandle(parts[parts.length - 1], { create: true })
+      const w = await fh.createWritable(); await w.write(content); await w.close()
+    }
+
+    async function getFileHandleByPath(dirHandle, rp) {
+      const parts = rp.split('/'); let cur = dirHandle
+      for (let i = 0; i < parts.length - 1; i++) cur = await cur.getDirectoryHandle(parts[i])
+      return await cur.getFileHandle(parts[parts.length - 1])
+    }
+
+    async function readFileByPath(dirHandle, rp) {
+      try { const fh = await getFileHandleByPath(dirHandle, rp); return await readFileContent(fh) }
+      catch { return null }
+    }
+
+    async function deleteFile(dirHandle, rp) {
+      const parts = rp.split('/'); let cur = dirHandle
+      for (let i = 0; i < parts.length - 1; i++) cur = await cur.getDirectoryHandle(parts[i])
+      await cur.removeEntry(parts[parts.length - 1])
+    }
+
+    async function moveFile(dirHandle, src, dest) {
+      const content = await readFileByPath(dirHandle, src)
+      if (content === null) throw new Error('Source file not found: ' + src)
+      await writeFileContent(dirHandle, dest, content)
+      await deleteFile(dirHandle, src)
+    }
+
+    // ==================== Context Generation ====================
+
+    async function generateContext() {
+      const store = useStore.getState()
+      const { dirHandle, selectedPaths, fileContents } = store
+      if (!dirHandle || selectedPaths.size === 0) return ''
+
+      let context = ''
+      const sortedPaths = Array.from(selectedPaths).sort()
+
+      for (const path of sortedPaths) {
+        let content = fileContents.get(path)
+        if (!content) {
+          try { const fh = await getFileHandleByPath(dirHandle, path); content = await readFileContent(fh); store.setFileContent(path, content) }
+          catch { continue }
+        }
+        const ext = getExtension(path)
+        const comment = getCommentPrefix(ext)
+        const lang = getLanguageTag(ext)
+        const fence = content.includes('```') ? '`'.repeat(4) : '`'.repeat(3)
+        context += `${fence}${lang}\n ${comment} ./${path}\n ${content}\n ${fence}\n\n`
+      }
+
+      context += `
+---
+以上是目前的代码结构。之后你输出代码修改时，请严格按照以下格式：
+
+## 操作指令格式
+
+每个操作由 **HTML 注释 (YAML 元数据)** + **可选的围栏代码块** 组成：
+
+### write – 创建或覆盖文件
+
+<!--
+action: write
+path: ./文件路径
+-->
+\`\`\`语言
+文件内容
+\`\`\`
+
+### edit – 精确文本替换（不支持正则，只做字面量匹配）
+
+<!--
+action: edit
+path: ./文件路径
+-->
+\`\`\`
+<<<<<<< SEARCH
+要被替换的原始文本（必须与文件中完全一致，包括缩进和空格）
+=======
+替换后的新文本（留空表示删除该段）
+>>>>>>> REPLACE
+\`\`\`
+
+### delete – 删除文件
+
+\`\`\`
+<!--
+action: delete
+path: ./文件路径
+-->
+\`\`\`
+
+### move – 移动/重命名文件
+
+\`\`\`
+<!--
+action: move
+source: ./源路径
+dest: ./目标路径
+-->
+\`\`\`
+
+## 规则
+
+1. 操作按出现顺序依次执行。
+2. edit 的 SEARCH 部分必须与文件中现有内容**完全一致**，包括所有空格、缩进、换行。
+3. 若同一文件需多处修改，请输出**多个独立的 edit 指令**，按从文件顶部到底部顺序排列。
+4. 只输出操作指令，不要输出额外解释文字。
+5. 路径使用相对路径，以 ./ 开头。
+6. 对于 markdown 或内部包含 \`\`\` 的文本，请使用 4 个反引号作为代码块分隔符。
+7. 所有修改完成后以 \`[所有修改已完成]\` 表明任务结束。
+---`
+
+      return context.trim()
+    }
+
+    // ==================== Patch Parser ====================
+
+    function parsePatchText(text) {
+      text = normalizeLineEndings(text)
+      const patches = []
+      const commentRegex = /<!--\s*\n?([\s\S]*?)\n?\s*-->/g
+      let commentMatch
+
+      while ((commentMatch = commentRegex.exec(text)) !== null) {
+        const yamlText = commentMatch[1]
+        const commentEnd = commentMatch.index + commentMatch[0].length
+        const params = parseSimpleYAML(yamlText)
+        if (!params.action) continue
+        const action = params.action.toLowerCase().trim()
+
+        const nextCI = text.indexOf('<!--', commentEnd)
+        const segment = text.substring(commentEnd, nextCI === -1 ? text.length : nextCI)
+        const codeBlockRegex = /(`{3,})(\w*)\n([\s\S]*?)\n\1/
+        const codeMatch = segment.match(codeBlockRegex)
+        let codeContent = codeMatch ? codeMatch[3] : ''
+
+        const displayPath = normalizePath(params.path || params.dest || params.source || '')
+        const patch = {
+          action, path: normalizePath(params.path || ''), source: normalizePath(params.source || ''),
+          dest: normalizePath(params.dest || ''), overwrite: params.overwrite !== false,
+          append: params.append === true, replace_all: params.replace_all === true,
+          content: codeContent, searchBlocks: [], originalContent: '', modifiedContent: '',
+          displayPath, hasCodeBlock: !!codeMatch,
+        }
+        if (action === 'edit') patch.searchBlocks = parseSearchReplace(codeContent)
+        patches.push(patch)
+      }
+      return patches
+    }
+
+    // ==================== Test Runner ====================
+
+    async function runTest() {
+      const { dirHandle, parsedPatches } = useStore.getState()
+      if (!dirHandle || parsedPatches.length === 0) {
+        useStore.getState().setTestResult({ passed: true, errors: [], feedbackMessage: '' })
+        return { passed: true, errors: [], feedbackMessage: '' }
+      }
+
+      const errors = []
+      const currentContents = new Map()
+
+      for (let i = 0; i < parsedPatches.length; i++) {
+        const patch = parsedPatches[i]
+
+        if (patch.action === 'edit') {
+          const path = patch.path
+          let currentContent = currentContents.get(path)
+          if (currentContent === undefined) {
+            currentContent = await readFileByPath(dirHandle, path)
+            currentContents.set(path, currentContent)
+          }
+          if (currentContent === null) {
+            errors.push({ patchIndex: i, action: patch.action, path, blockIndex: null, totalBlocks: null, searchText: null, errorType: 'file_not_found', message: `文件不存在: ${path}（如需创建请使用 write 操作）` })
+            continue
+          }
+          currentContent = normalizeLineEndings(currentContent)
+          currentContents.set(path, currentContent)
+
+          if (patch.searchBlocks.length === 0) {
+            errors.push({ patchIndex: i, action: patch.action, path, blockIndex: null, totalBlocks: null, searchText: null, errorType: 'no_search_blocks', message: `edit 操作中没有找到有效的 SEARCH/REPLACE 块` })
+            continue
+          }
+
+          let simulated = currentContent
+          for (let bi = 0; bi < patch.searchBlocks.length; bi++) {
+            const block = patch.searchBlocks[bi]
+            const search = normalizeLineEndings(block.search)
+            const replace = normalizeLineEndings(block.replace)
+            if (search.length === 0) {
+              errors.push({ patchIndex: i, action: patch.action, path, blockIndex: bi, totalBlocks: patch.searchBlocks.length, searchText: block.search, errorType: 'empty_search', message: `Block ${bi + 1} SEARCH 为空` })
+              continue
+            }
+            if (!simulated.includes(search)) {
+              errors.push({ patchIndex: i, action: patch.action, path, blockIndex: bi, totalBlocks: patch.searchBlocks.length, searchText: block.search, errorType: 'search_not_found', message: `Block ${bi + 1}/${patch.searchBlocks.length} SEARCH 文本未匹配` })
+            } else {
+              if (patch.replace_all) { simulated = simulated.split(search).join(replace) }
+              else { const idx = simulated.indexOf(search); simulated = simulated.substring(0, idx) + replace + simulated.substring(idx + search.length) }
+            }
+          }
+          currentContents.set(path, simulated)
+
+        } else if (patch.action === 'delete' || patch.action === 'move') {
+          const path = patch.action === 'move' ? patch.source : patch.path
+          if (!currentContents.has(path)) {
+            const content = await readFileByPath(dirHandle, path)
+            currentContents.set(path, content)
+            if (content === null) {
+              errors.push({ patchIndex: i, action: patch.action, path, blockIndex: null, totalBlocks: null, searchText: null, errorType: 'file_not_found', message: `${patch.action === 'move' ? '源' : ''}文件不存在: ${path}` })
+            }
+          }
+          if (patch.action === 'delete') { currentContents.delete(path) }
+          else if (patch.action === 'move') {
+            const sc = currentContents.get(patch.source)
+            if (sc !== undefined && sc !== null) { currentContents.delete(patch.source); currentContents.set(patch.dest, sc) }
+          }
+        } else if (patch.action === 'write') {
+          const content = normalizeLineEndings(patch.content)
+          if (patch.append) { const existing = currentContents.get(patch.path); currentContents.set(patch.path, (existing || '') + '\n' + content) }
+          else { currentContents.set(patch.path, content) }
+        }
+      }
+
+      const feedbackMessage = errors.length > 0 ? generateFeedbackMessage(errors, currentContents, parsedPatches) : ''
+      const result = { passed: errors.length === 0, errors, feedbackMessage }
+      useStore.getState().setTestResult(result)
+      return result
+    }
+
+    function generateFeedbackMessage(errors, currentContents, parsedPatches) {
+      let msg = '❌ 以下 edit 操作的 SEARCH 文本在当前文件中未找到匹配，请根据提供的当前文件内容重新生成：\n\n---\n\n'
+      const byPath = {}
+      for (const err of errors) { if (!byPath[err.path]) byPath[err.path] = []; byPath[err.path].push(err) }
+      for (const [path, errs] of Object.entries(byPath)) {
+        const ext = getExtension(path); const lang = getLanguageTag(ext); const comment = getCommentPrefix(ext)
+        msg += `## ./${path}\n\n`
+        for (const err of errs) {
+          if (err.errorType === 'file_not_found') msg += `⚠️ 文件不存在（如需创建新文件，请使用 write 操作而非 edit）\n\n`
+          else if (err.errorType === 'no_search_blocks') msg += `⚠️ edit 操作中没有找到有效的 SEARCH/REPLACE 块\n\n`
+          else if (err.errorType === 'empty_search') msg += `⚠️ Block ${err.blockIndex + 1} 的 SEARCH 内容为空\n\n`
+          else if (err.errorType === 'search_not_found') {
+            msg += `**Block ${err.blockIndex + 1}/${err.totalBlocks} 未匹配：**\n\n你在 SEARCH 中写了：\n\`\`\`\n${err.searchText}\n\`\`\`\n\n但该文本在当前文件中找不到完全一致的匹配。请检查缩进、空格、换行是否与文件中完全一致。\n\n`
+          }
+        }
+        const cc = currentContents.get(path)
+        if (cc && cc !== null) {
+          const maxLen = 4000; const truncated = cc.length > maxLen
+          msg += `当前文件内容：\n\`\`\`${lang}\n${comment} ./${path}\n${cc.substring(0, maxLen)}${truncated ? '\n\n... (内容过长已截断)' : ''}\n\`\`\`\n\n`
+        }
+        msg += '---\n\n'
+      }
+      msg += '请根据以上当前文件内容，确保 SEARCH 部分与文件中的文本完全一致（包括缩进、空格和换行），然后重新生成 edit 操作。'
+      return msg
+    }
+
+    // ==================== Components ====================
+
+    function FileTreeItem({ item, depth = 0, matchingPaths }) {
+      const { selectedPaths, expandedDirs, toggleSelected, toggleExpanded } = useStore()
+      const isExpanded = expandedDirs.has(item.path)
+      const isSelected = selectedPaths.has(item.path)
+      const isDir = item.kind === 'directory'
+      if (matchingPaths && !matchingPaths.has(item.path)) return null
+      const paddingLeft = depth * 20 + 12
+
+      return (
+        <div className={depth > 0 ? 'tree-indent' : ''}>
+          <div
+            className={`file-tree-item flex items-center gap-1.5 py-1 pr-2 rounded-sm ${isSelected && !isDir ? 'selected' : ''}`}
+            style={{ paddingLeft: `${paddingLeft}px` }}
+            onClick={() => isDir ? toggleExpanded(item.path) : toggleSelected(item.path)}
+          >
+            {isDir && (
+              <span className="flex-shrink-0 opacity-60" onClick={(e) => { e.stopPropagation(); toggleExpanded(item.path) }}>
+                {isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+              </span>
+            )}
+            {!isDir && <span className="w-3.5 flex-shrink-0" />}
+            {isDir ? <Folder size={14} className="text-yellow-500 flex-shrink-0" /> : <FileText size={14} className="text-blue-400 flex-shrink-0" />}
+            <span className={`text-sm truncate ${isDir ? 'font-medium text-gray-300' : 'text-gray-400'}`}>{item.name}</span>
+            {isSelected && !isDir && <Check size={12} className="text-green-400 ml-auto flex-shrink-0" />}
+          </div>
+          {isDir && isExpanded && item.children && (
+            <div>{item.children.map(child => <FileTreeItem key={child.path} item={child} depth={depth + 1} matchingPaths={matchingPaths} />)}</div>
+          )}
+        </div>
+      )
+    }
+
+    function getMatchingPaths(items, query) {
+      const matches = new Set()
+      if (!query) return null
+      const q = query.toLowerCase()
+      const traverse = (items) => {
+        for (const item of items) {
+          if (item.kind === 'file') {
+            if (item.path.toLowerCase().includes(q)) {
+              matches.add(item.path)
+              const parts = item.path.split('/'); let p = ''
+              for (const part of parts.slice(0, -1)) { p = p ? `${p}/${part}` : part; matches.add(p) }
+            }
+          } else if (item.children) traverse(item.children)
+        }
+      }
+      traverse(items)
+      return matches
+    }
+
+    function FileTreePanel() {
+      const { dirHandle, fileTree, selectedPaths, searchQuery, setSearchQuery, selectAll, clearSelection, hasGitignore, gitignorePatterns } = useStore()
+      const getAllFilePaths = (items) => {
+        const paths = []
+        const traverse = (items) => { for (const item of items) { if (item.kind === 'file') paths.push(item.path); else if (item.children) traverse(item.children) } }
+        traverse(items); return paths
+      }
+      const allPaths = getAllFilePaths(fileTree)
+      const allSelected = allPaths.length > 0 && allPaths.every(p => selectedPaths.has(p))
+      const matchingPaths = getMatchingPaths(fileTree, searchQuery)
+
+      return (
+        <div className="flex flex-col h-full bg-base-200 rounded-lg border border-base-300/50">
+          <div className="p-3 border-b border-base-300/50">
+            <div className="flex items-center justify-between mb-2">
+              <h3 className="font-bold text-sm flex items-center gap-2"><FolderOpen size={16} />File Tree</h3>
+              <div className="flex items-center gap-2">
+                {hasGitignore && (
+                  <span className="gitignore-badge"><GitBranch size={9} />.gitignore ({gitignorePatterns.length})</span>
+                )}
+                <span className="text-xs text-gray-500">{selectedPaths.size} selected</span>
+              </div>
+            </div>
+            <div className="flex gap-2 mb-2">
+              <button className="btn btn-xs btn-primary" onClick={selectDirectory}><FolderOpen size={12} /> Open Folder</button>
+              {dirHandle && <button className="btn btn-xs btn-ghost" onClick={() => useStore.getState().reset()}><Trash2 size={12} /> Reset</button>}
+            </div>
+            {dirHandle && (
+              <div className="flex gap-1">
+                <div className="relative flex-1">
+                  <Search size={12} className="absolute left-2 top-1/2 -translate-y-1/2 text-gray-500" />
+                  <input type="text" placeholder="Search files..." className="input input-xs input-bordered w-full pl-7" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
+                </div>
+                <button className="btn btn-xs btn-ghost" onClick={() => allSelected ? clearSelection() : selectAll(allPaths)}>{allSelected ? 'None' : 'All'}</button>
+              </div>
+            )}
+          </div>
+          <div className="flex-1 overflow-y-auto scrollbar-thin p-1">
+            {!dirHandle ? (
+              <div className="text-center text-gray-500 py-8 text-sm"><FolderOpen size={32} className="mx-auto mb-2 opacity-40" /><p>Click "Open Folder" to start</p></div>
+            ) : fileTree.length === 0 ? (
+              <div className="text-center text-gray-500 py-8 text-sm">
+                <FileX2 size={28} className="mx-auto mb-2 opacity-40" />
+                <p>No files found</p>
+                <p className="text-xs mt-1 text-gray-600">Directory may be empty or all files filtered by .gitignore</p>
+              </div>
+            ) : fileTree.map(item => <FileTreeItem key={item.path} item={item} matchingPaths={matchingPaths} />)}
+          </div>
+        </div>
+      )
+    }
+
+    function ContextPanel() {
+      const { selectedPaths, activeTab, setActiveTab } = useStore()
+      const [context, setContext] = React.useState('')
+      const [copied, setCopied] = React.useState(false)
+      const [generating, setGenerating] = React.useState(false)
+
+      React.useEffect(() => {
+        if (activeTab === 'context') {
+          setGenerating(true)
+          generateContext().then(ctx => { setContext(ctx || ''); setGenerating(false) })
+        }
+      }, [activeTab, selectedPaths])
+
+      const copyToClipboard = async () => {
+        await navigator.clipboard.writeText(context); setCopied(true); setTimeout(() => setCopied(false), 2000)
+      }
+
+      return (
+        <div className="flex flex-col h-full bg-base-200 rounded-lg border border-base-300/50">
+          <div className="flex border-b border-base-300/50">
+            <button className={`flex-1 py-2.5 text-sm font-medium transition-colors ${activeTab === 'context' ? 'tab-active' : 'tab-inactive'}`} onClick={() => setActiveTab('context')}>Context Prompt</button>
+            <button className={`flex-1 py-2.5 text-sm font-medium transition-colors ${activeTab === 'patch' ? 'tab-active' : 'tab-inactive'}`} onClick={() => setActiveTab('patch')}>Patch Input</button>
+          </div>
+          {activeTab === 'context' ? (
+            <div className="flex flex-col flex-1 p-3 min-h-0">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-xs text-gray-500">{generating ? 'Generating...' : `${selectedPaths.size} files selected`}</span>
+                <button className="btn btn-xs btn-primary" onClick={copyToClipboard} disabled={!context}>
+                  {copied ? <><Check size={12} /> Copied!</> : <><Copy size={12} /> Copy</>}
+                </button>
+              </div>
+              <div className="flex-1 min-h-0 rounded overflow-hidden border border-base-300/50">
+                {selectedPaths.size === 0 ? (
+                  <div className="flex items-center justify-center h-full text-gray-500 text-sm">Select files from the left panel...</div>
+                ) : <MonacoEditor value={context} readOnly={true} language="markdown" />}
+              </div>
+            </div>
+          ) : <PatchInputPanel />}
+        </div>
+      )
+    }
+
+    function PatchInputPanel() {
+      const { patchText, setPatchText, setParsedPatches, dirHandle, setError } = useStore()
+      const [parsing, setParsing] = React.useState(false)
+
+      const handleParse = async () => {
+        setParsing(true); setError(null)
+        try {
+          const patches = parsePatchText(patchText)
+          for (const patch of patches) {
+            const targetPath = patch.path || patch.source || ''
+            if (!targetPath) continue
+            try { patch.originalContent = await readFileByPath(dirHandle, targetPath) || '' } catch { patch.originalContent = '' }
+            if (patch.action === 'write') {
+              patch.modifiedContent = patch.append && patch.originalContent ? patch.originalContent + '\n' + patch.content : patch.content
+            } else if (patch.action === 'edit') {
+              if (patch.searchBlocks.length > 0 && patch.originalContent) {
+                const { result, errors } = applyEdits(patch.originalContent, patch.searchBlocks, patch.replace_all)
+                patch.modifiedContent = result; patch.errors = errors
+              } else if (patch.searchBlocks.length === 0) {
+                patch.errors = ['No SEARCH/REPLACE blocks found']; patch.modifiedContent = patch.originalContent
+              } else { patch.modifiedContent = patch.originalContent }
+            } else if (patch.action === 'delete') { patch.modifiedContent = '' }
+            else if (patch.action === 'move') {
+              try { patch.modifiedContent = await readFileByPath(dirHandle, patch.dest) || '' } catch { patch.modifiedContent = '' }
+            }
+          }
+          setParsedPatches(patches)
+          if (patches.length === 0) setError('No valid patches found. Make sure AI output uses <!-- action: write/edit/delete/move --> format.')
+        } catch (err) { setError('Parse error: ' + err.message) }
+        finally { setParsing(false) }
+      }
+
+      return (
+        <div className="flex flex-col flex-1 p-3 min-h-0">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-xs text-gray-500">Paste AI response here (v2 format)</span>
+            <button className="btn btn-xs btn-primary" onClick={handleParse} disabled={!patchText.trim() || parsing}>
+              {parsing ? 'Parsing...' : <><Play size={12} /> Parse</>}
+            </button>
+          </div>
+          <div className="flex-1 min-h-0 rounded overflow-hidden border border-base-300/50">
+            <MonacoEditor value={patchText} onChange={(val) => setPatchText(val)} readOnly={false} language="markdown" />
+          </div>
+        </div>
+      )
+    }
+
+    function ActionBadge({ action }) {
+      const config = {
+        write: { className: 'badge-write', icon: FilePlus, label: 'WRITE' },
+        edit: { className: 'badge-edit', icon: Pencil, label: 'EDIT' },
+        delete: { className: 'badge-delete', icon: Trash2, label: 'DELETE' },
+        move: { className: 'badge-move', icon: ArrowRight, label: 'MOVE' },
+      }
+      const c = config[action] || config.write; const Icon = c.icon
+      return <span className={`stat-pill ${c.className}`}><Icon size={10} />{c.label}</span>
+    }
+
+    // ==================== Diff Viewer ====================
+
+    function DiffViewerPanel() {
+      const { parsedPatches, dirHandle, appliedPatches, patchErrors, testResult,
+        clearPatchError, setAppliedPatch, setPatchError } = useStore()
+      const editorsRef = React.useRef([])
+      const [testing, setTesting] = React.useState(false)
+      const [applying, setApplying] = React.useState(false)
+      const [feedbackCopied, setFeedbackCopied] = React.useState(false)
+
+      const sameFileGroups = React.useMemo(() => {
+        const m = new Map()
+        parsedPatches.forEach((p, i) => { const k = p.action === 'move' ? p.source : p.path; if (!k) return; if (!m.has(k)) m.set(k, []); m.get(k).push(i) })
+        return m
+      }, [parsedPatches])
+
+      const hasSameFilePatches = React.useMemo(() => { for (const [, v] of sameFileGroups) { if (v.length > 1) return true } return false }, [sameFileGroups])
+      const actionCounts = React.useMemo(() => { const c = { write: 0, edit: 0, delete: 0, move: 0 }; for (const p of parsedPatches) { if (c[p.action] !== undefined) c[p.action]++ } return c }, [parsedPatches])
+      const testErrorsByPatch = React.useMemo(() => { const m = new Map(); if (testResult && !testResult.passed) { for (const err of testResult.errors) { if (!m.has(err.patchIndex)) m.set(err.patchIndex, []); m.get(err.patchIndex).push(err) } } return m }, [testResult])
+
+      React.useEffect(() => {
+        if (parsedPatches.length === 0) return
+        let disposed = false
+        loadMonaco().then(() => {
+          if (disposed) return
+          editorsRef.current.forEach(e => e?.dispose?.()); editorsRef.current = []
+          parsedPatches.forEach((patch, index) => {
+            if (patch.action !== 'write' && patch.action !== 'edit') return
+            const container = document.getElementById(`diff-container-${index}`)
+            if (!container) return; container.innerHTML = ''
+            const ext = getExtension(patch.path); const lang = getLanguageTag(ext)
+            const editor = monaco.editor.createDiffEditor(container, {
+              readOnly: patch.action === 'edit', originalEditable: false, renderSideBySide: true, wordWrap: 'on',
+              automaticLayout: true, theme: 'custom-dark', minimap: { enabled: false },
+              scrollBeyondLastLine: false, fontSize: 12, scrollbar: { verticalScrollbarSize: 6, horizontalScrollbarSize: 6 },
+            })
+            editor.setModel({
+              original: monaco.editor.createModel(patch.originalContent || '', lang),
+              modified: monaco.editor.createModel(patch.modifiedContent || '', lang)
+            })
+            editorsRef.current[index] = editor
+          })
+        })
+        return () => { disposed = true; editorsRef.current.forEach(e => e?.dispose?.()); editorsRef.current = [] }
+      }, [parsedPatches])
+
+      const handleTest = async () => { setTesting(true); await runTest(); setTesting(false) }
+
+      const applyPatch = async (index) => {
+        const patch = parsedPatches[index]
+        if (!patch || !dirHandle) return
+        if (useStore.getState().appliedPatches.has(index)) return
+        const lockPaths = patch.action === 'move' ? [patch.source, patch.dest] : patch.path ? [patch.path] : []
+        try {
+          await withWriteLock(lockPaths, async () => {
+            clearPatchError(index)
+            if (patch.action === 'write') {
+              const editor = editorsRef.current[index]
+              const mm = editor?.getModifiedEditor()?.getModel()
+              const fc = mm ? normalizeLineEndings(mm.getValue()) : normalizeLineEndings(patch.content)
+              if (patch.append) { const ex = await readFileByPath(dirHandle, patch.path) || ''; await writeFileContent(dirHandle, patch.path, ex + '\n' + fc) }
+              else await writeFileContent(dirHandle, patch.path, fc)
+            } else if (patch.action === 'edit') {
+              const currentContent = await readFileByPath(dirHandle, patch.path)
+              if (currentContent === null) throw new Error(`文件不存在: ${patch.path}`)
+              const { result, errors } = applyEdits(currentContent, patch.searchBlocks, patch.replace_all)
+              if (errors.length > 0) throw new Error(errors.join('; '))
+              await writeFileContent(dirHandle, patch.path, result)
+              const editor = editorsRef.current[index]
+              if (editor) {
+                const ext = getExtension(patch.path); const lang = getLanguageTag(ext)
+                const origModel = editor.getOriginalEditor()?.getModel()
+                const oldContent = origModel ? origModel.getValue() : patch.originalContent
+                editor.setModel({ original: monaco.editor.createModel(oldContent, lang), modified: monaco.editor.createModel(result, lang) })
+              }
+            } else if (patch.action === 'delete') { await deleteFile(dirHandle, patch.path) }
+            else if (patch.action === 'move') { await moveFile(dirHandle, patch.source, patch.dest) }
+            setAppliedPatch(index)
+          })
+        } catch (err) {
+          setPatchError(index, err.name === 'NotAllowedError' ? 'Permission denied. Please re-select the directory.' : `Failed: ${err.message}`)
+        }
+      }
+
+      const applyAllPatches = async () => {
+        const toApply = parsedPatches.map((_, i) => i).filter(i => !appliedPatches.has(i))
+        if (toApply.length === 0) return
+        setApplying(true)
+        for (const index of toApply) {
+          await applyPatch(index)
+          if (useStore.getState().patchErrors.has(index)) break
+        }
+        setApplying(false)
+      }
+
+      const copyFeedback = async () => {
+        if (testResult?.feedbackMessage) { await navigator.clipboard.writeText(testResult.feedbackMessage); setFeedbackCopied(true); setTimeout(() => setFeedbackCopied(false), 2000) }
+      }
+
+      const canApply = testResult?.passed === true
+      const totalApplied = appliedPatches.size, totalPatches = parsedPatches.length, allApplied = totalApplied === totalPatches
+
+      if (parsedPatches.length === 0) {
+        return (
+          <div className="flex flex-col h-full bg-base-200 rounded-lg border border-base-300/50 p-4">
+            <h3 className="font-bold text-sm flex items-center gap-2 mb-4"><FileCode size={16} />Diff Review</h3>
+            <div className="flex-1 flex items-center justify-center text-gray-500 text-sm">
+              <div className="text-center"><FileText size={32} className="mx-auto mb-2 opacity-40" /><p>Parse a patch to see diffs</p><p className="text-xs mt-1 text-gray-600">Supports write / edit / delete / move</p></div>
+            </div>
+          </div>
+        )
+      }
+
+      return (
+        <div className="flex flex-col h-full bg-base-200 rounded-lg border border-base-300/50">
+          <div className="p-3 border-b border-base-300/50">
+            <div className="flex items-center justify-between">
+              <h3 className="font-bold text-sm flex items-center gap-2"><FileCode size={16} />Diff Review</h3>
+              <div className="flex gap-2 items-center">
+                <span className="text-xs text-gray-500">{totalApplied}/{totalPatches} applied</span>
+                <button className="btn btn-xs btn-test" onClick={handleTest} disabled={testing || allApplied || applying}>
+                  {testing ? <><span className="loading loading-spinner loading-xs"></span> Testing...</> : <><FlaskConical size={12} /> Test</>}
+                </button>
+                <button className="btn btn-xs btn-success" onClick={applyAllPatches} disabled={!canApply || allApplied || applying}>
+                  {applying ? <><span className="loading loading-spinner loading-xs"></span> Applying...</> : <><Save size={12} /> Apply All</>}
+                </button>
+              </div>
+            </div>
+            <div className="flex gap-1.5 mt-2">
+              {actionCounts.write > 0 && <span className="stat-pill badge-write"><FilePlus size={10} /> {actionCounts.write}</span>}
+              {actionCounts.edit > 0 && <span className="stat-pill badge-edit"><Pencil size={10} /> {actionCounts.edit}</span>}
+              {actionCounts.delete > 0 && <span className="stat-pill badge-delete"><Trash2 size={10} /> {actionCounts.delete}</span>}
+              {actionCounts.move > 0 && <span className="stat-pill badge-move"><ArrowRight size={10} /> {actionCounts.move}</span>}
+            </div>
+          </div>
+
+          <div className="flex-1 overflow-y-auto scrollbar-thin p-3 space-y-3">
+            {hasSameFilePatches && (
+              <div className="same-file-hint"><Lock size={13} /><span>多个操作指向同一文件，将按顺序串行写入（edit 操作基于最新内容重算）</span></div>
+            )}
+            {testResult && (
+              testResult.passed ? (
+                <div className="test-banner test-banner-pass"><ShieldCheck size={16} /><span className="text-sm font-medium">All checks passed</span><span className="text-xs opacity-70 ml-1">— safe to apply</span></div>
+              ) : (
+                <div className="test-banner test-banner-fail"><ShieldAlert size={16} /><span className="text-sm font-medium">{testResult.errors.length} check{testResult.errors.length > 1 ? 's' : ''} failed</span><span className="text-xs opacity-70 ml-1">— apply is blocked</span></div>
+              )
+            )}
+            {testResult && !testResult.passed && testResult.feedbackMessage && (
+              <div className="feedback-box">
+                <div className="feedback-box-header">
+                  <div className="flex items-center gap-2 text-sm text-red-400"><AlertCircle size={14} /><span className="font-medium">Feedback Message</span><span className="text-xs text-gray-500">— copy and send back to AI</span></div>
+                  <button className="btn btn-xs btn-ghost text-red-400" onClick={copyFeedback}>{feedbackCopied ? <><Check size={12} /> Copied!</> : <><ClipboardCopy size={12} /> Copy Feedback</>}</button>
+                </div>
+                <div className="feedback-box-body"><pre>{testResult.feedbackMessage}</pre></div>
+              </div>
+            )}
+            {!testResult && (
+              <div className="test-banner" style={{ background: 'rgba(168,85,247,0.08)', border: '1px solid rgba(168,85,247,0.2)', color: '#c084fc' }}><FlaskConical size={16} /><span className="text-sm">Run Test before applying — verifies all SEARCH matches</span></div>
+            )}
+
+            {parsedPatches.map((patch, index) => {
+              const isApplied = appliedPatches.has(index)
+              const applyError = patchErrors.get(index)
+              const patchTestErrors = testErrorsByPatch.get(index) || []
+              const hasTestError = patchTestErrors.length > 0
+              const hasSearchError = patch.errors && patch.errors.length > 0
+              const isNewFile = patch.action === 'write' && !patch.originalContent
+              const filePath = patch.action === 'move' ? patch.source : patch.path
+              const sameFileIndices = sameFileGroups.get(filePath) || []
+              const isSharedFile = sameFileIndices.length > 1
+
+              let cardClass = 'patch-card'
+              if (isApplied) cardClass += ' patch-card-applied'
+              else if (hasTestError) cardClass += ' patch-card-test-fail'
+              else if (testResult?.passed) cardClass += ' patch-card-test-pass'
+
+              return (
+                <div key={`${patch.action}-${patch.path || patch.source}-${index}`} className={cardClass}>
+                  <div className="patch-card-header">
+                    <ActionBadge action={patch.action} />
+                    {patch.action === 'move' ? (
+                      <div className="flex items-center gap-1.5 text-sm font-mono text-gray-300 truncate"><span className="truncate">{patch.source}</span><ArrowRight size={12} className="text-purple-400 flex-shrink-0" /><span className="truncate">{patch.dest}</span></div>
+                    ) : <span className="text-sm font-mono text-gray-300 truncate">{patch.path}</span>}
+                    {isNewFile && <span className="stat-pill" style={{ background: 'rgba(59,130,246,0.15)', color: '#60a5fa', border: '1px solid rgba(59,130,246,0.25)' }}><Plus size={9} /> NEW</span>}
+                    {patch.append && <span className="stat-pill" style={{ background: 'rgba(34,197,94,0.15)', color: '#4ade80', border: '1px solid rgba(34,197,94,0.25)' }}>APPEND</span>}
+                    {patch.replace_all && <span className="stat-pill badge-edit">ALL</span>}
+                    {isSharedFile && !isApplied && <span className="stat-pill" style={{ background: 'rgba(245,158,11,0.12)', color: '#fbbf24', border: '1px solid rgba(245,158,11,0.25)' }}><Layers size={9} /> #{sameFileIndices.indexOf(index) + 1}/{sameFileIndices.length}</span>}
+                    {testResult?.passed && !isApplied && <Check size={13} className="text-green-400 flex-shrink-0" />}
+                    {hasTestError && <X size={13} className="text-red-400 flex-shrink-0" />}
+                    {isApplied && <span className="stat-pill" style={{ background: 'rgba(34,197,94,0.15)', color: '#4ade80', border: '1px solid rgba(34,197,94,0.25)' }}><Check size={9} /> APPLIED</span>}
+                    <div className="ml-auto flex items-center gap-1.5 flex-shrink-0">
+                      {applyError && <span className="text-xs text-red-400 flex items-center gap-1" title={applyError}><AlertCircle size={11} /></span>}
+                      <button className="btn btn-xs btn-primary" onClick={() => applyPatch(index)} disabled={isApplied || !canApply || applying}>
+                        {isApplied ? <><Check size={12} /> Done</> : <><Save size={12} /> Apply</>}
+                      </button>
+                    </div>
+                  </div>
+
+                  {patch.action === 'edit' && !isApplied && (
+                    <div className="px-3 py-1.5 bg-blue-500/5 border-b border-blue-500/10 text-[10px] text-blue-400/60 flex items-center gap-1">
+                      <Lock size={9} />Edit diff is read-only — SEARCH/REPLACE will be re-applied against latest file content on apply
+                    </div>
+                  )}
+
+                  {hasTestError && (
+                    <div className="px-3 py-2 bg-red-500/10 border-b border-red-500/20 space-y-1.5">
+                      {patchTestErrors.map((err, ei) => (
+                        <div key={ei} className="flex items-start gap-2 text-xs text-red-300"><AlertTriangle size={11} className="mt-0.5 flex-shrink-0 text-red-400" /><span>{err.message}</span></div>
+                      ))}
+                    </div>
+                  )}
+                  {hasSearchError && (
+                    <div className="px-3 py-2 bg-amber-500/10 border-b border-amber-500/20">
+                      {patch.errors.map((err, i) => (
+                        <div key={i} className="text-xs text-amber-400 flex items-start gap-1.5"><AlertTriangle size={11} className="mt-0.5 flex-shrink-0" /><span className="font-mono">{err}</span></div>
+                      ))}
+                    </div>
+                  )}
+                  {applyError && (
+                    <div className="px-3 py-2 bg-red-500/10 border-b border-red-500/20">
+                      <div className="text-xs text-red-400 flex items-start gap-1.5"><AlertCircle size={11} className="mt-0.5 flex-shrink-0" /><span>{applyError}</span></div>
+                    </div>
+                  )}
+                  {(patch.action === 'write' || patch.action === 'edit') && <div id={`diff-container-${index}`} className="h-64" />}
+                  {patch.action === 'delete' && patch.originalContent && (
+                    <div className="px-3 py-2">
+                      <div className="text-xs text-gray-500 mb-1">File content to be deleted ({patch.originalContent.split('\n').length} lines):</div>
+                      <pre className="text-xs text-red-300/70 bg-red-500/5 rounded p-2 max-h-32 overflow-auto scrollbar-thin font-mono">{patch.originalContent.substring(0, 500)}{patch.originalContent.length > 500 ? '\n...' : ''}</pre>
+                    </div>
+                  )}
+                  {patch.action === 'move' && patch.originalContent && (
+                    <div className="px-3 py-2">
+                      <div className="text-xs text-gray-500 mb-1">File content ({patch.originalContent.split('\n').length} lines, unchanged):</div>
+                      <pre className="text-xs text-purple-300/70 bg-purple-500/5 rounded p-2 max-h-32 overflow-auto scrollbar-thin font-mono">{patch.originalContent.substring(0, 500)}{patch.originalContent.length > 500 ? '\n...' : ''}</pre>
+                    </div>
+                  )}
+                  {patch.action === 'edit' && patch.searchBlocks.length > 0 && (
+                    <div className="px-3 py-2 border-t border-base-300/30 search-preview">
+                      <div className="text-xs text-gray-500 mb-1.5">{patch.searchBlocks.length} SEARCH/REPLACE block{patch.searchBlocks.length > 1 ? 's' : ''}:</div>
+                      {patch.searchBlocks.map((block, bi) => {
+                        const blockFailed = patchTestErrors.some(e => e.blockIndex === bi)
+                        const blockPassed = testResult?.passed || (!blockFailed && testResult !== null)
+                        const statusClass = blockFailed ? '' : (testResult ? 'match-ok' : '')
+                        return (
+                          <div key={bi} className="mb-2.5 last:mb-0">
+                            <div className="flex items-center gap-1.5 mb-1">
+                              <span className="search-label">Block {bi + 1} SEARCH</span>
+                              {blockFailed && <X size={10} className="text-red-400" />}
+                              {blockPassed && testResult && !blockFailed && <Check size={10} className="text-green-400" />}
+                              <span className="text-[10px] text-gray-600">→</span>
+                              <span className="replace-label">REPLACE</span>
+                            </div>
+                            <div className="grid grid-cols-2 gap-1">
+                              <div className={statusClass}><pre className="search-pre">{block.search.substring(0, 300)}{block.search.length > 300 ? '...' : ''}</pre></div>
+                              <pre className="replace-pre">{block.replace.substring(0, 300)}{block.replace.length > 300 ? '...' : ''}</pre>
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )
+    }
+
+    function ErrorToast() {
+      const { error, clearError } = useStore()
+      if (!error) return null
+      return (
+        <div className="toast toast-top toast-center z-50">
+          <div className="alert alert-error shadow-lg"><AlertCircle size={16} /><span className="text-sm">{error}</span><button className="btn btn-xs btn-ghost" onClick={clearError}><X size={14} /></button></div>
+        </div>
+      )
+    }
+
+    function App() {
+      return (
+        <div className="h-screen flex flex-col bg-base-100 text-base-content">
+          <header className="px-4 py-2.5 border-b border-base-300/50 flex items-center justify-between bg-base-100">
+            <h1 className="text-lg font-bold flex items-center gap-2">
+              <FileCode size={20} className="text-primary" />
+              AI Context Prompt Tool
+              <span className="text-xs font-normal text-gray-500 bg-base-300/50 px-1.5 py-0.5 rounded">v2</span>
+            </h1>
+            <div className="text-xs text-gray-500">Select files → Copy Context → Paste AI Patch → Test → Apply</div>
+
+            <div className="text-xs text-gray-100">
+              <a href="https://github.com/lenML/page-tools">
+                <button className="btn btn-accent">github</button>
+              </a>
+              <a href="./index.html">
+                <button className="btn btn-accent">V1</button>
+              </a>
+            </div>
+          </header>
+          <main className="flex-1 grid grid-cols-12 gap-3 p-3 min-h-0">
+            <div className="col-span-3 min-h-0"><FileTreePanel /></div>
+            <div className="col-span-4 min-h-0"><ContextPanel /></div>
+            <div className="col-span-5 min-h-0"><DiffViewerPanel /></div>
+          </main>
+          <ErrorToast />
+        </div>
+      )
+    }
+
+    createRoot(document.getElementById("root")).render(<App />)
+  </script>
+</body>
+
+</html>
