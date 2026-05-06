@@ -1,0 +1,2434 @@
+<!DOCTYPE html>
+<html data-theme="vscode-dark">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Prompt 合并工具</title>
+  <script type="importmap">
+        {
+            "imports": {
+                "react": "https://esm.sh/react@19.2.4",
+                "react/jsx-runtime": "https://esm.sh/react@19.2.4/jsx-runtime",
+                "react-dom/client": "https://esm.sh/react-dom@19.2.4/client",
+                "lucide-react": "https://esm.sh/lucide-react?external=react",
+                "zustand": "https://esm.sh/zustand?external=react",
+                "@monaco-editor/react": "https://esm.sh/@monaco-editor/react@4.6.0?external=react,react-dom"
+            }
+        }
+    </script>
+  <!-- esm.sh/tsx => babel + tsx runtime -->
+  <script type="module" src="https://esm.sh/tsx"></script>
+  <link href="https://cdn.jsdelivr.net/npm/daisyui@5" rel="stylesheet" type="text/css" />
+  <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4">
+  </script>
+  <style>
+    :root {
+      --vscode-bg: #1f1f1f;
+      --vscode-sidebar: #252526;
+      --vscode-panel: #2d2d2d;
+      --vscode-input: #313131;
+      --vscode-border: #3e3e3e;
+      --vscode-border-light: #474747;
+      --vscode-text: #cccccc;
+      --vscode-text-secondary: #999999;
+      --vscode-text-muted: #6a6a6a;
+      --vscode-highlight: #37373d;
+      --vscode-blue: #0078d4;
+      --vscode-blue-hover: #1a8ad4;
+      --vscode-accent: #569cd6;
+      --vscode-green: #4ec9b0;
+      --vscode-orange: #ce9178;
+      --vscode-yellow: #dcdcaa;
+      --vscode-red: #f44747;
+      --vscode-topbar: #2d2d2d;
+      --vscode-activity: #333333;
+      --vscode-focus-ring: #007fd4;
+      --vscode-scrollbar: #424242;
+      --vscode-scrollbar-hover: #555555;
+    }
+
+    [data-theme="vscode-dark"] {
+      --color-base-100: oklch(0.18 0 0);
+      --color-base-200: oklch(0.21 0 0);
+      --color-base-300: oklch(0.26 0 0);
+      --color-base-content: oklch(0.82 0 0);
+      --color-primary: oklch(0.55 0.18 255);
+      --color-primary-content: oklch(0.98 0 0);
+      --color-secondary: oklch(0.6 0.12 180);
+      --color-secondary-content: oklch(0.98 0 0);
+      --color-accent: oklch(0.6 0.15 220);
+      --color-accent-content: oklch(0.98 0 0);
+      --color-neutral: oklch(0.25 0 0);
+      --color-neutral-content: oklch(0.8 0 0);
+      --color-info: oklch(0.6 0.12 220);
+      --color-info-content: oklch(0.98 0 0);
+      --color-success: oklch(0.6 0.12 160);
+      --color-success-content: oklch(0.98 0 0);
+      --color-warning: oklch(0.65 0.14 85);
+      --color-warning-content: oklch(0.15 0 0);
+      --color-error: oklch(0.5 0.18 20);
+      --color-error-content: oklch(0.98 0 0);
+      --radius-box: 0.375rem;
+      --radius-btn: 0.25rem;
+      --radius-field: 0.25rem;
+      --radius-selector: 0.25rem;
+      --border: 1px;
+      --depth: 0;
+      --noise: 0;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html,
+    body {
+      margin: 0;
+      padding: 0;
+      height: 100vh;
+      width: 100vw;
+      overflow: hidden;
+      background: var(--vscode-bg);
+      color: var(--vscode-text);
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+      font-size: 13px;
+      line-height: 1.5;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }
+
+    #root {
+      height: 100vh;
+      width: 100vw;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+
+    ::-webkit-scrollbar-track {
+      background: transparent;
+    }
+
+    ::-webkit-scrollbar-thumb {
+      background: var(--vscode-scrollbar);
+      border-radius: 3px;
+    }
+
+    ::-webkit-scrollbar-thumb:hover {
+      background: var(--vscode-scrollbar-hover);
+    }
+
+    ::-webkit-scrollbar-corner {
+      background: transparent;
+    }
+
+    .font-mono {
+      font-family: 'Cascadia Code', 'JetBrains Mono', 'Fira Code', 'SF Mono', 'Consolas', 'Monaco', 'Menlo', monospace;
+    }
+
+    @keyframes fadeSlideIn {
+      from {
+        opacity: 0;
+        transform: translateY(6px);
+      }
+
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    .animate-fade-slide-in {
+      animation: fadeSlideIn 0.25s cubic-bezier(0.4, 0, 0.2, 1) both;
+    }
+
+    @keyframes toast-in {
+      from {
+        opacity: 0;
+        transform: translateY(16px) scale(0.96);
+      }
+
+      to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+      }
+    }
+
+    .toast-animate {
+      animation: toast-in 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    @keyframes slot-pulse {
+
+      0%,
+      100% {
+        box-shadow: 0 0 0 0 rgba(86, 156, 214, 0.35);
+      }
+
+      50% {
+        box-shadow: 0 0 0 5px rgba(86, 156, 214, 0);
+      }
+    }
+
+    .slot-highlight {
+      animation: slot-pulse 2.2s ease-in-out infinite;
+    }
+
+    .vscode-card {
+      background: var(--vscode-panel);
+      border: 1px solid var(--vscode-border);
+      border-radius: 4px;
+    }
+
+    .vscode-card-header {
+      border-bottom: 1px solid var(--vscode-border);
+      padding: 8px 12px;
+      font-weight: 600;
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.3px;
+      color: var(--vscode-text-secondary);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      user-select: none;
+    }
+
+    .vscode-input {
+      background: var(--vscode-input);
+      border: 1px solid var(--vscode-border);
+      color: var(--vscode-text);
+      border-radius: 3px;
+      padding: 6px 10px;
+      font-size: 13px;
+      transition: border-color 0.15s;
+      outline: none;
+      width: 100%;
+      resize: vertical;
+      font-family: 'Cascadia Code', 'JetBrains Mono', 'Fira Code', 'SF Mono', 'Consolas', monospace;
+      line-height: 1.5;
+    }
+
+    .vscode-input:focus {
+      border-color: var(--vscode-focus-ring);
+      box-shadow: 0 0 0 1px rgba(0, 127, 212, 0.25);
+    }
+
+    .vscode-input::placeholder {
+      color: var(--vscode-text-muted);
+    }
+
+    .vscode-btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 5px;
+      padding: 5px 12px;
+      font-size: 12px;
+      font-weight: 500;
+      border-radius: 3px;
+      cursor: pointer;
+      transition: all 0.12s;
+      border: 1px solid transparent;
+      white-space: nowrap;
+      user-select: none;
+      line-height: 1.4;
+    }
+
+    .vscode-btn-primary {
+      background: var(--vscode-blue);
+      color: #fff;
+      border-color: var(--vscode-blue);
+    }
+
+    .vscode-btn-primary:hover {
+      background: var(--vscode-blue-hover);
+    }
+
+    .vscode-btn-ghost {
+      background: transparent;
+      color: var(--vscode-text);
+      border-color: transparent;
+    }
+
+    .vscode-btn-ghost:hover {
+      background: var(--vscode-highlight);
+    }
+
+    .vscode-btn-outline {
+      background: transparent;
+      color: var(--vscode-text);
+      border-color: var(--vscode-border);
+    }
+
+    .vscode-btn-outline:hover {
+      background: var(--vscode-highlight);
+      border-color: var(--vscode-border-light);
+    }
+
+    .vscode-btn-sm {
+      padding: 3px 8px;
+      font-size: 11px;
+      gap: 3px;
+    }
+
+    .vscode-btn-xs {
+      padding: 2px 6px;
+      font-size: 10px;
+      gap: 2px;
+      border-radius: 2px;
+    }
+
+    .vscode-btn-icon {
+      padding: 4px;
+      min-width: 26px;
+      min-height: 26px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 3px;
+      cursor: pointer;
+      background: transparent;
+      border: none;
+      color: var(--vscode-text-secondary);
+      transition: all 0.12s;
+    }
+
+    .vscode-btn-icon:hover {
+      background: var(--vscode-highlight);
+      color: var(--vscode-text);
+    }
+
+    .vscode-btn-icon-sm {
+      padding: 2px;
+      min-width: 22px;
+      min-height: 22px;
+    }
+
+    .vscode-badge {
+      display: inline-flex;
+      align-items: center;
+      padding: 1px 7px;
+      font-size: 10px;
+      font-weight: 500;
+      border-radius: 10px;
+      background: var(--vscode-highlight);
+      color: var(--vscode-text-secondary);
+      line-height: 1.6;
+    }
+
+    .vscode-badge-accent {
+      background: rgba(86, 156, 214, 0.2);
+      color: var(--vscode-accent);
+    }
+
+    .vscode-badge-success {
+      background: rgba(78, 201, 176, 0.18);
+      color: var(--vscode-green);
+    }
+
+    .vscode-badge-warning {
+      background: rgba(220, 220, 170, 0.18);
+      color: var(--vscode-yellow);
+    }
+
+    .vscode-divider {
+      border: none;
+      border-top: 1px solid var(--vscode-border);
+      margin: 0;
+    }
+
+    .sidebar-nav-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 7px 12px;
+      cursor: pointer;
+      border-radius: 3px;
+      margin: 1px 6px;
+      transition: all 0.1s;
+      font-size: 13px;
+      color: var(--vscode-text-secondary);
+      user-select: none;
+      border: 1px solid transparent;
+    }
+
+    .sidebar-nav-item:hover {
+      background: var(--vscode-highlight);
+      color: var(--vscode-text);
+    }
+
+    .sidebar-nav-item.active {
+      background: var(--vscode-highlight);
+      color: var(--vscode-text);
+      border-color: var(--vscode-border);
+    }
+
+    .sidebar-nav-item .nav-icon {
+      flex-shrink: 0;
+      width: 18px;
+      height: 18px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      opacity: 0.8;
+    }
+
+    .sidebar-nav-item.active .nav-icon {
+      opacity: 1;
+      color: var(--vscode-accent);
+    }
+
+    .sidebar-nav-item .nav-badge {
+      margin-left: auto;
+      font-size: 10px;
+      background: var(--vscode-highlight);
+      padding: 1px 6px;
+      border-radius: 8px;
+      min-width: 18px;
+      text-align: center;
+    }
+
+    .vscode-toast {
+      position: fixed;
+      bottom: 16px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 9999;
+      pointer-events: none;
+      background: var(--vscode-panel);
+      border: 1px solid var(--vscode-border-light);
+      color: var(--vscode-text);
+      padding: 8px 18px;
+      border-radius: 6px;
+      font-size: 12px;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+      white-space: nowrap;
+    }
+
+    .vscode-code-block {
+      background: var(--vscode-input);
+      border: 1px solid var(--vscode-border);
+      border-radius: 3px;
+      padding: 8px 12px;
+      font-family: 'Cascadia Code', 'JetBrains Mono', 'Fira Code', 'SF Mono', 'Consolas', monospace;
+      font-size: 12px;
+      line-height: 1.6;
+      color: var(--vscode-text);
+      white-space: pre-wrap;
+      word-break: break-all;
+      overflow-y: auto;
+      max-height: 240px;
+    }
+
+    .vscode-search {
+      display: flex;
+      align-items: center;
+      background: var(--vscode-input);
+      border: 1px solid var(--vscode-border);
+      border-radius: 3px;
+      padding: 4px 8px;
+      gap: 6px;
+    }
+
+    .vscode-search input {
+      background: transparent;
+      border: none;
+      outline: none;
+      color: var(--vscode-text);
+      font-size: 12px;
+      width: 100%;
+      font-family: inherit;
+    }
+
+    .vscode-search input::placeholder {
+      color: var(--vscode-text-muted);
+    }
+
+    .vscode-search .search-icon {
+      color: var(--vscode-text-muted);
+      flex-shrink: 0;
+    }
+
+    .preset-chip {
+      display: block;
+      width: 100%;
+      text-align: left;
+      padding: 6px 10px;
+      font-size: 11px;
+      cursor: pointer;
+      border-radius: 3px;
+      background: transparent;
+      border: 1px solid transparent;
+      color: var(--vscode-text-secondary);
+      transition: all 0.1s;
+      line-height: 1.4;
+    }
+
+    .preset-chip:hover {
+      background: var(--vscode-highlight);
+      color: var(--vscode-text);
+      border-color: var(--vscode-border);
+    }
+
+    .slot-collapsed-bar {
+      writing-mode: vertical-rl;
+      text-orientation: mixed;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 4px;
+      cursor: pointer;
+      background: var(--vscode-panel);
+      border: 1px solid var(--vscode-border);
+      border-radius: 4px;
+      color: var(--vscode-text-muted);
+      font-size: 11px;
+      font-weight: 500;
+      letter-spacing: 0.5px;
+      user-select: none;
+      transition: all 0.15s;
+      padding: 10px 6px;
+      width: 34px;
+      min-width: 34px;
+    }
+
+    .slot-collapsed-bar:hover {
+      background: var(--vscode-highlight);
+      color: var(--vscode-text);
+      border-color: var(--vscode-border-light);
+    }
+
+    .slot-collapsed-bar .badge-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--vscode-green);
+      flex-shrink: 0;
+      writing-mode: horizontal-tb;
+    }
+
+    .lib-tab {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 6px 14px;
+      font-size: 12px;
+      font-weight: 500;
+      cursor: pointer;
+      border-radius: 3px 3px 0 0;
+      background: transparent;
+      border: 1px solid transparent;
+      color: var(--vscode-text-muted);
+      transition: all 0.12s;
+      user-select: none;
+      border-bottom: 2px solid transparent;
+      margin-bottom: -1px;
+    }
+
+    .lib-tab:hover {
+      color: var(--vscode-text);
+      background: var(--vscode-highlight);
+    }
+
+    .lib-tab.active {
+      color: var(--vscode-text);
+      background: var(--vscode-panel);
+      border-color: var(--vscode-border);
+      border-bottom-color: var(--vscode-panel);
+      font-weight: 600;
+    }
+
+    .monaco-editor-container {
+      flex: 1;
+      min-height: 180px;
+      border-radius: 3px;
+      overflow: hidden;
+      border: 1px solid var(--vscode-border);
+    }
+
+    .monaco-editor-container:focus-within {
+      border-color: var(--vscode-focus-ring);
+      box-shadow: 0 0 0 1px rgba(0, 127, 212, 0.25);
+    }
+
+    .confirm-dialog-overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 300;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: rgba(0, 0, 0, 0.6);
+      backdrop-filter: blur(2px);
+      animation: fadeSlideIn 0.15s ease-out;
+    }
+
+    .confirm-dialog {
+      background: var(--vscode-panel);
+      border: 1px solid var(--vscode-border-light);
+      border-radius: 6px;
+      padding: 16px 20px;
+      max-width: 420px;
+      width: 90%;
+      box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6);
+    }
+
+    .url-import-input {
+      display: flex;
+      gap: 6px;
+      align-items: center;
+      margin-top: 6px;
+      padding: 6px 8px;
+      background: var(--vscode-input);
+      border-radius: 4px;
+      border: 1px solid var(--vscode-border);
+    }
+
+    .url-import-input input {
+      flex: 1;
+      background: transparent;
+      border: none;
+      outline: none;
+      color: var(--vscode-text);
+      font-size: 11px;
+      font-family: inherit;
+    }
+
+    .url-import-input input::placeholder {
+      color: var(--vscode-text-muted);
+    }
+  </style>
+</head>
+
+<body>
+  <div id="root"></div>
+
+  <script type="text/babel">
+    import * as React from "react";
+    window.React = React;
+  </script>
+
+  <script type="text/babel">
+    import { createRoot } from "react-dom/client";
+    import {
+      Copy, Check, Trash2, Braces, Wand2, Info, ChevronDown, ChevronRight,
+      FileText, Sparkles, ArrowRight, X, BookOpen, Zap, Clipboard, Layers,
+      RefreshCw, Code2, Library, History, Save, Plus,
+      Pencil, Play, AlertTriangle, Clock, Tag, Search, FolderOpen, Terminal,
+      FunctionSquare, ArrowLeft, Home, RotateCcw, Download,
+      ExternalLink, MoreHorizontal, ListTree, Settings2, GripHorizontal,
+      Pin, PinOff, PanelLeftClose, PanelLeftOpen, Columns3, Columns2,
+      Upload, FileDown, Link, Globe,
+    } from "lucide-react";
+    import { create } from "zustand";
+    import { Editor as MonacoEditor, loader as monacoLoader } from "@monaco-editor/react";
+
+    // 配置 Monaco Editor 的 CDN 路径
+    monacoLoader.config({
+      paths: {
+        vs: "https://cdn.jsdelivr.net/npm/monaco-editor@0.52.2/min/vs"
+      }
+    });
+
+    // ==================== GitHub SVG图标 ====================
+    const GitHubIcon = ({ size = 16 }) => (
+      <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor"
+        style={{ opacity: 0.8 }}>
+        <path d="M12 0C5.37 0 0 5.37 0 12c0 5.3 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61-.546-1.385-1.335-1.755-1.335-1.755-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.605-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 21.795 24 17.295 24 12 24 5.37 18.63 0 12 0z" />
+      </svg>
+    );
+
+    // ==================== 内置转换器函数库 ====================
+    const transformers = {
+      base64: {
+        label: "Base64 编码",
+        desc: "将文本编码为 Base64 格式",
+        category: "编码",
+        icon: "🔐",
+        fn: (val) => {
+          try {
+            return btoa(encodeURIComponent(val).replace(/%([0-9A-F]{2})/g, (_, p1) =>
+              String.fromCharCode(parseInt(p1, 16))));
+          } catch { return val; }
+        },
+      },
+      base64decode: {
+        label: "Base64 解码",
+        desc: "将 Base64 格式解码为原始文本",
+        category: "编码",
+        icon: "🔓",
+        fn: (val) => {
+          try {
+            return decodeURIComponent(atob(val).split("").map((c) =>
+              "%" + ("00" + c.charCodeAt(0).toString(16)).slice(-2)).join(""));
+          } catch { return val; }
+        },
+      },
+      upper: {
+        label: "转大写",
+        desc: "将所有字母转换为大写",
+        category: "大小写",
+        icon: "⬆️",
+        fn: (val) => val.toUpperCase(),
+      },
+      lower: {
+        label: "转小写",
+        desc: "将所有字母转换为小写",
+        category: "大小写",
+        icon: "⬇️",
+        fn: (val) => val.toLowerCase(),
+      },
+      capitalize: {
+        label: "首字母大写",
+        desc: "将每个单词的首字母大写",
+        category: "大小写",
+        icon: "✍️",
+        fn: (val) =>
+          val.split(" ").map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(" "),
+      },
+      unicode: {
+        label: "Unicode 转义",
+        desc: "将字符转换为 \\uXXXX 格式",
+        category: "编码",
+        icon: "🔣",
+        fn: (val) =>
+          val.split("").map((c) => "\\u" + c.charCodeAt(0).toString(16).padStart(4, "0")).join(""),
+      },
+      rand_unicode_cjk: {
+        label: "随机Unicode(CJK)",
+        desc: "随机对CJK字符进行Unicode转义",
+        category: "编码",
+        icon: "🎲",
+        fn: (val) =>
+          val.split("").map((c) =>
+            !/[\u4e00-\u9fff\u3400-\u4dbf\uf900-\ufaff\u3040-\u309f\u30a0-\u30ff\uac00-\ud7af\u1100-\u11ff\u3130-\u318f]/
+              .test(c) ? c :
+              Math.random() > 0.5 ? c : ("\\u" + c.charCodeAt(0).toString(16).padStart(4, "0"))
+          ).join(""),
+      },
+      unicode_cjk: {
+        label: "CJK Unicode",
+        desc: "对所有CJK字符进行Unicode转义",
+        category: "编码",
+        icon: "🔣",
+        fn: (val) =>
+          val.split("").map((c) =>
+            !/[\u4e00-\u9fff\u3400-\u4dbf\uf900-\ufaff\u3040-\u309f\u30a0-\u30ff\uac00-\ud7af\u1100-\u11ff\u3130-\u318f]/
+              .test(c) ? c :
+              ("\\u" + c.charCodeAt(0).toString(16).padStart(4, "0"))
+          ).join(""),
+      },
+      unicodeDecode: {
+        label: "Unicode 解码",
+        desc: "将 \\uXXXX 转义序列还原",
+        category: "编码",
+        icon: "🔤",
+        fn: (val) => val.replace(/\\u[\dA-Fa-f]{4}/g, (m) => String.fromCharCode(parseInt(m.slice(2),
+          16))),
+      },
+      json: {
+        label: "JSON 美化",
+        desc: "将JSON字符串格式化（缩进2空格）",
+        category: "数据",
+        icon: "📋",
+        fn: (val) => { try { return JSON.stringify(JSON.parse(val), null, 2); } catch { return val; } },
+      },
+      jsonCompact: {
+        label: "JSON 压缩",
+        desc: "将JSON字符串压缩为单行",
+        category: "数据",
+        icon: "📦",
+        fn: (val) => { try { return JSON.stringify(JSON.parse(val)); } catch { return val; } },
+      },
+      urlEncode: {
+        label: "URL 编码",
+        desc: "将文本进行 URL 百分号编码",
+        category: "编码",
+        icon: "🔗",
+        fn: (val) => { try { return encodeURIComponent(val); } catch { return val; } },
+      },
+      urlDecode: {
+        label: "URL 解码",
+        desc: "将 URL 百分号编码还原",
+        category: "编码",
+        icon: "🌐",
+        fn: (val) => { try { return decodeURIComponent(val); } catch { return val; } },
+      },
+      trim: {
+        label: "去除空格",
+        desc: "去除文本首尾的空白字符",
+        category: "文本",
+        icon: "✂️",
+        fn: (val) => val.trim(),
+      },
+      reverse: {
+        label: "反转字符串",
+        desc: "将字符串顺序颠倒",
+        category: "文本",
+        icon: "🔄",
+        fn: (val) => val.split("").reverse().join(""),
+      },
+      escape: {
+        label: "HTML 转义",
+        desc: "转义 & < > \" ' 等HTML特殊字符",
+        category: "编码",
+        icon: "🛡️",
+        fn: (val) => val.replace(/[&<>"']/g, (c) => ({
+          "&": "&amp;",
+          "<": "&lt;",
+          ">": "&gt;",
+          '"': "&quot;",
+          "'": "&#39;"
+        }[c])),
+      },
+      removeSpaces: {
+        label: "移除空格",
+        desc: "移除文本中所有空白字符",
+        category: "文本",
+        icon: "🧹",
+        fn: (val) => val.replace(/\s+/g, ""),
+      },
+      slug: {
+        label: "Slug 化",
+        desc: "转换为URL友好的slug格式",
+        category: "文本",
+        icon: "🏷️",
+        fn: (val) => val.toLowerCase().replace(/[^\w\s-]/g, "").replace(/\s+/g, "-").replace(/-+/g, "-")
+          .trim(),
+      },
+      double: {
+        label: "重复一遍",
+        desc: "将输入内容重复两次",
+        category: "文本",
+        icon: "📝",
+        fn: (val) => val + val,
+      },
+      uuid: {
+        label: "UUID",
+        desc: "在末尾追加一个随机UUID",
+        category: "编码",
+        icon: "🔗",
+        fn: (val) => val + " " + crypto.randomUUID(),
+      },
+    };
+
+    const applyTransformer = (name, value, customFns = []) => {
+      if (name.startsWith('fn:')) {
+        const fnName = name.slice(3);
+        const fnDef = customFns.find(f => f.name === fnName);
+        if (fnDef && fnDef.code.trim()) {
+          try {
+            const fn = new Function('val', fnDef.code);
+            const result = fn(value);
+            return typeof result === 'string' ? result : String(result);
+          } catch { return value; }
+        }
+        return value;
+      }
+      const t = transformers[name];
+      if (!t) return value;
+      return t.fn(value);
+    };
+
+    const getTransformerMeta = (name, customFns = []) => {
+      if (name.startsWith('fn:')) {
+        const fnName = name.slice(3);
+        const fnDef = customFns.find(f => f.name === fnName);
+        return fnDef ? {
+          label: fnDef.name,
+          desc: fnDef.description || '自定义JS函数',
+          category: '自定义',
+          icon: '⚡',
+        } : { label: fnName, desc: '未知自定义函数', category: '自定义', icon: '❓' };
+      }
+      return transformers[name] || null;
+    };
+
+    // ==================== 解析工具 ====================
+    const SLOT_REGEX = /\{(\w+)(?:\s*\|\s*([^}]+))?\}/g;
+    const parseSlots = (template) => {
+      const slots = [];
+      const regex = new RegExp(SLOT_REGEX.source, "g");
+      let match;
+      while ((match = regex.exec(template)) !== null) {
+        const rawTransformers = match[2] || "";
+        const transformerList = rawTransformers.split("|").map((t) => t.trim()).filter(Boolean);
+        slots.push({ name: match[1], transformers: transformerList, raw: match[0], index: match.index });
+      }
+      return slots;
+    };
+    const getUniqueSlotNames = (template) => {
+      const slots = parseSlots(template);
+      return [...new Set(slots.map((s) => s.name))];
+    };
+    const getAllTransformersForName = (template, name) => {
+      const slots = parseSlots(template);
+      const transformerSet = new Set();
+      slots.filter((s) => s.name === name).forEach((s) => s.transformers.forEach((t) => transformerSet.add(t)));
+      return [...transformerSet];
+    };
+    const computeResult = (template, inputs, customFns = []) => {
+      if (!template) return "";
+      const slots = parseSlots(template);
+      const sorted = [...slots].sort((a, b) => b.index - a.index);
+      let result = template;
+      for (const slot of sorted) {
+        const rawValue = inputs[slot.name] !== undefined ? inputs[slot.name] : "";
+        let value = rawValue;
+        for (const tName of slot.transformers) {
+          value = applyTransformer(tName, value, customFns);
+        }
+        result = result.slice(0, slot.index) + value + result.slice(slot.index + slot.raw.length);
+      }
+      return result;
+    };
+
+    // ==================== localStorage 工具 ====================
+    const loadFromStorage = (key, fallback) => {
+      try {
+        const raw = localStorage.getItem(key);
+        if (raw === null || raw === undefined) return fallback;
+        return JSON.parse(raw);
+      } catch { return fallback; }
+    };
+    const saveToStorage = (key, data) => {
+      try { localStorage.setItem(key, JSON.stringify(data)); } catch { /* quota exceeded */ }
+    };
+
+    // ==================== 预设示例 ====================
+    const presets = [{
+      id: "preset-code-review",
+      title: "代码审查请求",
+      icon: "💻",
+      description: "将代码片段Base64编码后嵌入审查模板",
+      template: `请对以下代码进行详细审查，分析其安全性、性能和可维护性。\n\n代码内容（Base64编码）：\n\`\`\`\n{code | base64}\n\`\`\`\n\n审查要求：\n- 语言：{language}\n- 重点检查：{focus_area | lower}\n- 输出格式：{output_format | json}\n\n请逐行分析并给出改进建议。`,
+      inputs: {
+        code: 'function processData(input) {\n  const result = eval("return " + input);\n  return result;\n}',
+        language: "JavaScript",
+        focus_area: "安全漏洞 & 代码注入",
+        output_format: '{"issues":[],"score":0,"summary":""}',
+      },
+      tags: ['预设', '代码', '审查'],
+    }, {
+      id: "preset-translate",
+      title: "多语言翻译",
+      icon: "🌍",
+      description: "翻译任务模板，使用大小写转换",
+      template: `请将以下内容从 {source_lang | upper} 翻译为 {target_lang | upper}。\n\n原文：\n"""\n{text}\n"""\n\n关键词（需保持原样）：\n{keywords | upper}\n\n翻译时请注意：\n1. 保持 {tone | lower} 的语气风格\n2. 保留原始格式和标点`,
+      inputs: {
+        source_lang: "中文",
+        target_lang: "english",
+        text: "人工智能正在深刻改变我们的生活方式，从智能助手到自动驾驶，技术创新的步伐从未停止。",
+        keywords: "AI, Deep Learning, NLP, Transformer",
+        tone: "Professional",
+      },
+      tags: ['预设', '翻译'],
+    }, {
+      id: "preset-api-builder",
+      title: "API 请求构建",
+      icon: "🚀",
+      description: "构建API请求，使用JSON和URL编码",
+      template: `构建一个API请求：\n\n端点：https://api.example.com/v1/{endpoint | slug}\n方法：{method | upper}\n查询参数：{query_params | urlEncode}\n\n请求体：\n\`\`\`json\n{request_body | json}\n\`\`\`\n\n预期的响应格式：\n\`\`\`json\n{expected_response | jsonCompact}\n\`\`\`\n\n请生成完整的 cURL 命令和对应的代码示例。`,
+      inputs: {
+        endpoint: "User Profile Data",
+        method: "post",
+        query_params: "include=details&format=json&lang=zh-CN",
+        request_body: '{"user_id":12345,"fields":["name","email","avatar"],"include_meta":true}',
+        expected_response: '{"status":"ok","data":{"user":{"name":"string","email":"string"}}}',
+      },
+      tags: ['预设', 'API', '开发'],
+    }, {
+      id: "preset-data-sanitize",
+      title: "数据清洗管道",
+      icon: "🧹",
+      description: "展示多转换器管道组合",
+      template: `数据处理任务：\n\n原始输入（需清洗）：\n{raw_data | trim | escape}\n\n处理后的标识符：\n{identifier | lower | removeSpaces | slug}\n\n对比展示：\n- 原文：{raw_data}\n- 大写版：{raw_data | upper}\n- Base64版：{raw_data | base64}\n- Unicode版：{raw_data | unicode}\n\n请验证清洗结果是否正确。`,
+      inputs: {
+        raw_data: '  Hello World! <script>alert("xss")\<\/script> ',
+        identifier: "My Awesome Product Name 2024",
+      },
+      tags: ['预设', '数据处理'],
+    },];
+
+    // 将预设转换为模板库条目格式
+    const presetsAsLibraryEntries = () => presets.map(p => ({
+      id: p.id,
+      name: p.title,
+      description: p.description,
+      tags: p.tags || ['预设'],
+      template: p.template,
+      inputs: { ...p.inputs },
+      createdAt: new Date('2024-01-01').toISOString(),
+      updatedAt: new Date('2024-01-01').toISOString(),
+    }));
+
+    // ==================== Zustand Store ====================
+    const HISTORY_MAX = 60;
+    const getInitialTemplateLibrary = () => {
+      const stored = loadFromStorage('prompt-merger-template-lib', null);
+      if (stored !== null) return stored;
+      // 首次使用，填充预设
+      const entries = presetsAsLibraryEntries();
+      saveToStorage('prompt-merger-template-lib', entries);
+      return entries;
+    };
+
+    const useStore = create((set, get) => ({
+      template: "",
+      inputs: {},
+      expandedRef: false,
+      lastCopied: null,
+      customFunctions: loadFromStorage('prompt-merger-custom-fns', []),
+      templateLibrary: getInitialTemplateLibrary(),
+      history: loadFromStorage('prompt-merger-history', []),
+      activeTab: 'workbench',
+      toastMessage: null,
+      sidebarCollapsed: false,
+      slotPanelCollapsed: false,
+
+      setTemplate: (template) => set({ template }),
+      setInput: (name, value) => set((s) => ({ inputs: { ...s.inputs, [name]: value } })),
+      setInputs: (inputs) => set({ inputs }),
+      clearAll: () => set({ template: "", inputs: {}, lastCopied: null }),
+      loadPreset: (preset) => set({
+        template: preset.template, inputs: preset.inputs || {},
+        lastCopied: null
+      }),
+      setExpandedRef: (v) => set({ expandedRef: v }),
+      setLastCopied: (v) => set({ lastCopied: v }),
+      setActiveTab: (v) => set({ activeTab: v }),
+      toggleSidebar: () => set((s) => ({ sidebarCollapsed: !s.sidebarCollapsed })),
+      toggleSlotPanel: () => set((s) => ({ slotPanelCollapsed: !s.slotPanelCollapsed })),
+      showToast: (msg) => {
+        set({ toastMessage: msg });
+        setTimeout(() => set({ toastMessage: null }), 2500);
+      },
+
+      addCustomFunction: (fnDef) => {
+        const newFn = { ...fnDef, id: crypto.randomUUID(), createdAt: new Date().toISOString() };
+        set((s) => ({ customFunctions: [...s.customFunctions, newFn] }));
+        get().showToast(`✅ 自定义函数 "${fnDef.name}" 已添加`);
+      },
+      updateCustomFunction: (id, updates) => {
+        set((s) => ({
+          customFunctions: s.customFunctions.map(f => f.id === id ? {
+            ...f,
+            ...updates,
+            updatedAt: new Date().toISOString()
+          } : f),
+        }));
+        get().showToast('✅ 自定义函数已更新');
+      },
+      deleteCustomFunction: (id) => {
+        const fn = get().customFunctions.find(f => f.id === id);
+        set((s) => ({ customFunctions: s.customFunctions.filter(f => f.id !== id) }));
+        if (fn) get().showToast(`🗑️ 已删除 "${fn.name}"`);
+      },
+
+      saveToLibrary: (name, description, tags, templateData, inputsData) => {
+        const template = templateData !== undefined ? templateData : get().template;
+        const inputs = inputsData !== undefined ? inputsData : get().inputs;
+        if (!template.trim()) { get().showToast('⚠️ 模板为空，无法保存'); return; }
+        const entry = {
+          id: crypto.randomUUID(),
+          name: name || '未命名模板',
+          description: description || '',
+          tags: tags || [],
+          template,
+          inputs: { ...inputs },
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        };
+        set((s) => ({ templateLibrary: [...s.templateLibrary, entry] }));
+        get().showToast(`💾 模板 "${entry.name}" 已保存到模板库`);
+      },
+      deleteFromLibrary: (id) => {
+        const entry = get().templateLibrary.find(e => e.id === id);
+        set((s) => ({ templateLibrary: s.templateLibrary.filter(e => e.id !== id) }));
+        if (entry) get().showToast(`🗑️ 已删除模板 "${entry.name}"`);
+      },
+      loadFromLibrary: (id) => {
+        const entry = get().templateLibrary.find(e => e.id === id);
+        if (entry) {
+          set({ template: entry.template, inputs: { ...entry.inputs }, lastCopied: null });
+          get().showToast(`📂 已加载模板 "${entry.name}"`);
+        }
+      },
+
+      // 导入导出
+      exportTemplateLibrary: () => {
+        const data = {
+          version: "1.0",
+          type: "prompt-merger-template-library",
+          exportedAt: new Date().toISOString(),
+          templateLibrary: get().templateLibrary,
+        };
+        return JSON.stringify(data, null, 2);
+      },
+      exportCustomFunctions: () => {
+        const data = {
+          version: "1.0",
+          type: "prompt-merger-custom-functions",
+          exportedAt: new Date().toISOString(),
+          customFunctions: get().customFunctions,
+        };
+        return JSON.stringify(data, null, 2);
+      },
+      exportAll: () => {
+        const data = {
+          version: "1.0",
+          type: "prompt-merger-full-export",
+          exportedAt: new Date().toISOString(),
+          templateLibrary: get().templateLibrary,
+          customFunctions: get().customFunctions,
+        };
+        return JSON.stringify(data, null, 2);
+      },
+      importData: (jsonData) => {
+        try {
+          const data = typeof jsonData === 'string' ? JSON.parse(jsonData) : jsonData;
+          if (!data || !data.type) throw new Error('无效的导入数据格式');
+
+          let importedCount = 0;
+          const state = get();
+
+          if (data.templateLibrary && Array.isArray(data.templateLibrary)) {
+            const existingIds = new Set(state.templateLibrary.map(e => e.id));
+            const newEntries = data.templateLibrary.filter(e => !existingIds.has(e.id));
+            if (newEntries.length > 0) {
+              set((s) => ({ templateLibrary: [...s.templateLibrary, ...newEntries] }));
+              importedCount += newEntries.length;
+            }
+          }
+
+          if (data.customFunctions && Array.isArray(data.customFunctions)) {
+            const existingIds = new Set(state.customFunctions.map(f => f.id));
+            const existingNames = new Set(state.customFunctions.map(f => f.name));
+            const newFns = data.customFunctions.filter(f =>
+              !existingIds.has(f.id) && !existingNames.has(f.name)
+            );
+            if (newFns.length > 0) {
+              set((s) => ({ customFunctions: [...s.customFunctions, ...newFns] }));
+              importedCount += newFns.length;
+            }
+          }
+
+          if (importedCount > 0) {
+            get().showToast(`📥 成功导入 ${importedCount} 个项目`);
+          } else {
+            get().showToast('ℹ️ 没有新的项目可导入（可能已存在）');
+          }
+          return true;
+        } catch (e) {
+          get().showToast(`❌ 导入失败: ${e.message}`);
+          return false;
+        }
+      },
+
+      pushHistory: () => {
+        const { template, inputs, history } = get();
+        if (!template.trim()) return;
+        const lastEntry = history[0];
+        if (lastEntry && lastEntry.template === template && JSON.stringify(lastEntry.inputs) === JSON.stringify(
+          inputs)) {
+          return;
+        }
+        const entry = {
+          id: crypto.randomUUID(),
+          template,
+          inputs: { ...inputs },
+          timestamp: new Date().toISOString(),
+          label: template.slice(0, 60).replace(/\n/g, ' ') + (template.length > 60 ? '...' : ''),
+        };
+        const newHistory = [entry, ...history].slice(0, HISTORY_MAX);
+        set({ history: newHistory });
+      },
+      restoreFromHistory: (id) => {
+        const entry = get().history.find(h => h.id === id);
+        if (entry) {
+          set({ template: entry.template, inputs: { ...entry.inputs }, lastCopied: null });
+          get().showToast('🕐 已从历史记录恢复');
+        }
+      },
+      clearHistory: () => {
+        set({ history: [] });
+        get().showToast('🗑️ 历史记录已清空');
+      },
+      deleteHistoryEntry: (id) => {
+        set((s) => ({ history: s.history.filter(h => h.id !== id) }));
+      },
+      fixHistoryToLibrary: (historyId, name) => {
+        const entry = get().history.find(h => h.id === historyId);
+        if (!entry) { get().showToast('⚠️ 未找到历史记录条目'); return; }
+        const libEntry = {
+          id: crypto.randomUUID(),
+          name: name || '历史模板 - ' + new Date(entry.timestamp).toLocaleString('zh-CN', {
+            month: 'short',
+            day: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit'
+          }),
+          description: '从历史记录固定的模板',
+          tags: ['历史固定'],
+          template: entry.template,
+          inputs: { ...entry.inputs },
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        };
+        set((s) => ({ templateLibrary: [...s.templateLibrary, libEntry] }));
+        get().showToast(`📌 已固定到模板库: "${libEntry.name}"`);
+        return libEntry;
+      },
+    }));
+
+    // 持久化订阅
+    useStore.subscribe((state) => {
+      saveToStorage('prompt-merger-custom-fns', state.customFunctions);
+      saveToStorage('prompt-merger-template-lib', state.templateLibrary);
+      saveToStorage('prompt-merger-history', state.history);
+    });
+
+    let historyDebounceTimer = null;
+    useStore.subscribe((state, prev) => {
+      if (state.template !== prev.template || JSON.stringify(state.inputs) !== JSON.stringify(prev.inputs)) {
+        if (state.template.trim()) {
+          clearTimeout(historyDebounceTimer);
+          historyDebounceTimer = setTimeout(() => {
+            useStore.getState().pushHistory();
+          }, 2000);
+        }
+      }
+    });
+
+    // ==================== 确认弹窗组件 ====================
+    function ConfirmDialog({ title, message, confirmLabel, confirmDanger, onConfirm, onCancel }) {
+      return (
+        <div className="confirm-dialog-overlay" onClick={onCancel}>
+          <div className="confirm-dialog animate-fade-slide-in" onClick={(e) => e.stopPropagation()}>
+            <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', marginBottom: '12px' }}>
+              <div style={{
+                width: '32px', height: '32px', borderRadius: '50%',
+                background: confirmDanger ? 'rgba(244,71,71,0.15)' : 'rgba(220,220,170,0.15)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                flexShrink: 0
+              }}>
+                <AlertTriangle size={16} style={{ color: confirmDanger ? 'var(--vscode-red)' : 'var(--vscode-yellow)' }} />
+              </div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <h3 style={{ margin: 0, fontSize: '13px', fontWeight: 600, color: 'var(--vscode-text)' }}>{title}</h3>
+                <p style={{ margin: '4px 0 0', fontSize: '11px', color: 'var(--vscode-text-secondary)', lineHeight: 1.5 }}>{message}</p>
+              </div>
+            </div>
+            <div style={{ display: 'flex', gap: '6px', justifyContent: 'flex-end' }}>
+              <button className="vscode-btn vscode-btn-ghost vscode-btn-sm" onClick={onCancel}>取消</button>
+              <button
+                className={`vscode-btn vscode-btn-sm`}
+                style={{
+                  background: confirmDanger ? 'var(--vscode-red)' : 'var(--vscode-blue)',
+                  color: '#fff',
+                  borderColor: confirmDanger ? 'var(--vscode-red)' : 'var(--vscode-blue)',
+                }}
+                onClick={onConfirm}>
+                {confirmLabel || '确认'}
+              </button>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // ==================== 组件 ====================
+    function TransformerBadge({ name, valid, customFns = [] }) {
+      const meta = getTransformerMeta(name, customFns);
+      const displayName = meta ? meta.label : name;
+      const isCustom = name.startsWith('fn:');
+      const colorClass = valid ? (isCustom ? "vscode-badge-accent" : "vscode-badge") : "vscode-badge-warning";
+      return (
+        <span className={`vscode-badge ${colorClass}`} style={{ gap: '3px', fontSize: '10px' }}
+          title={meta ? meta.desc : "未知转换器 - 将保持原值"}>
+          {meta?.icon || "❓"} {displayName}
+          {!valid && <span style={{ fontSize: '9px', opacity: 0.6 }}>(未知)</span>}
+          {isCustom && <span style={{ fontSize: '8px', opacity: 0.5 }}>自定义</span>}
+        </span>
+      );
+    }
+
+    function SlotInputCard({ slotName, allTransformers, value, onChange, template, customFns }) {
+      const [showPreview, setShowPreview] = React.useState(false);
+      const [previewCopied, setPreviewCopied] = React.useState(false);
+      const slots = React.useMemo(() => parseSlots(template), [template]);
+      const firstSlotForName = React.useMemo(() => slots.find((s) => s.name === slotName), [slots, slotName]);
+      const previewValue = React.useMemo(() => {
+        if (!firstSlotForName || firstSlotForName.transformers.length === 0) return null;
+        let val = value || "";
+        for (const tName of firstSlotForName.transformers) {
+          val = applyTransformer(tName, val, customFns);
+        }
+        return val;
+      }, [firstSlotForName, value, customFns]);
+      const occurrenceCount = React.useMemo(() => slots.filter((s) => s.name === slotName).length, [slots,
+        slotName
+      ]);
+      const transformerVariants = React.useMemo(() => {
+        const variants = new Set();
+        slots.filter((s) => s.name === slotName).forEach((s) => {
+          const key = s.transformers.join("|") || "__none__";
+          variants.add(key);
+        });
+        return [...variants].map((v) => v === "__none__" ? [] : v.split("|"));
+      }, [slots, slotName]);
+      const handleCopyPreview = async () => {
+        if (!previewValue) return;
+        try {
+          await navigator.clipboard.writeText(previewValue);
+          setPreviewCopied(true);
+          setTimeout(() => setPreviewCopied(false), 1800);
+        } catch { }
+      };
+      return (
+        <div className="vscode-card animate-fade-slide-in" style={{ marginBottom: '8px' }}>
+          <div style={{ padding: '8px 10px', borderBottom: `1px solid var(--vscode-border)` }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '4px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '22px', height: '22px', borderRadius: '3px', background: 'rgba(86,156,214,0.15)', color: 'var(--vscode-accent)' }}>
+                  <Braces size={12} /></span>
+                <span className="font-mono" style={{ fontWeight: 600, fontSize: '12px', color: 'var(--vscode-text)' }}>{slotName}</span>
+                {occurrenceCount > 1 && <span className="vscode-badge" style={{ fontSize: '9px' }}>出现 {occurrenceCount} 次</span>}
+              </div>
+              <div style={{ display: 'flex', gap: '3px', flexWrap: 'wrap' }}>
+                {allTransformers.length === 0 ? (
+                  <span className="vscode-badge" style={{ fontSize: '10px' }}>直接插入</span>
+                ) : (
+                  allTransformers.map((tName) =>
+                    <TransformerBadge key={tName} name={tName} valid={!!getTransformerMeta(tName, customFns)}
+                      customFns={customFns} />)
+                )}
+              </div>
+            </div>
+            {transformerVariants.length > 1 && (
+              <div style={{ fontSize: '10px', color: 'var(--vscode-text-muted)', marginTop: '4px', display: 'flex', alignItems: 'center', gap: '4px', flexWrap: 'wrap' }}>
+                <Layers size={10} />该变量在不同位置使用了不同的转换器组合：
+                {transformerVariants.map((variant, idx) => (
+                  <span key={idx} className="vscode-badge" style={{ fontSize: '9px' }}>
+                    {variant.length === 0 ? "无转换" : variant.map((t) => getTransformerMeta(t, customFns)?.label || t).join(" → ")}
+                  </span>))}
+              </div>)}
+          </div>
+          <div style={{ padding: '8px 10px' }}>
+            <div style={{ position: 'relative' }}>
+              <textarea className="vscode-input"
+                style={{ minHeight: '52px', fontSize: '12px', resize: 'vertical' }}
+                placeholder={`输入 ${slotName} 的值...`} value={value || ""}
+                onChange={(e) => onChange(slotName, e.target.value)} rows={2} />
+              {value && value.length > 0 && (
+                <button className="vscode-btn-icon vscode-btn-icon-sm"
+                  style={{ position: 'absolute', top: '4px', right: '4px', opacity: 0.5 }}
+                  onClick={() => onChange(slotName, "")} title="清除"><X size={11} /></button>)}
+            </div>
+          </div>
+          {previewValue !== null && previewValue !== value && (
+            <div style={{ padding: '6px 10px', borderTop: `1px solid var(--vscode-border)`, background: 'var(--vscode-input)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
+                <button style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '10px', color: 'var(--vscode-text-muted)', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
+                  onClick={() => setShowPreview(!showPreview)}>
+                  {showPreview ? <ChevronDown size={11} /> : <ChevronRight size={11} />}
+                  <Wand2 size={10} />转换后预览
+                </button>
+                <button className="vscode-btn vscode-btn-ghost vscode-btn-xs"
+                  onClick={handleCopyPreview}
+                  style={{ color: previewCopied ? 'var(--vscode-green)' : 'var(--vscode-text-muted)' }}>
+                  {previewCopied ? <><Check size={9} /> 已复制</> : <><Copy size={9} /> 复制</>}
+                </button>
+              </div>
+              {showPreview && (
+                <div className="vscode-code-block" style={{ maxHeight: '100px', fontSize: '11px', marginTop: '2px', padding: '6px 8px' }}>
+                  {previewValue || <span style={{ color: 'var(--vscode-text-muted)', fontStyle: 'italic' }}>（空）</span>}
+                </div>)}
+            </div>)}
+          {value && value.length > 0 && (
+            <div style={{ textAlign: 'right', fontSize: '9px', color: 'var(--vscode-text-muted)', padding: '2px 10px 4px' }}>{value.length} 字符</div>)}
+        </div>
+      );
+    }
+
+    function CustomFunctionEditor({ fnDef, onSave, onCancel, existingNames }) {
+      const [name, setName] = React.useState(fnDef?.name || '');
+      const [description, setDescription] = React.useState(fnDef?.description || '');
+      const [code, setCode] = React.useState(fnDef?.code || '');
+      const [testInput, setTestInput] = React.useState('');
+      const [testOutput, setTestOutput] = React.useState('');
+      const [testError, setTestError] = React.useState('');
+      const [showTest, setShowTest] = React.useState(false);
+      const nameError = !name.trim() ? '函数名不能为空' :
+        /[^a-zA-Z0-9_]/.test(name) ? '函数名只能包含字母、数字和下划线' :
+          existingNames.includes(name) && (!fnDef || fnDef.name !== name) ? '函数名已存在' : '';
+      const codeError = !code.trim() ? '函数代码不能为空' : '';
+      const handleTest = () => {
+        setTestError('');
+        if (codeError) { setTestError('请先填写函数代码'); return; }
+        try {
+          const fn = new Function('val', code);
+          const result = fn(testInput);
+          setTestOutput(typeof result === 'string' ? result : JSON.stringify(result, null, 2));
+        } catch (e) {
+          setTestError(`执行错误: ${e.message}`);
+          setTestOutput('');
+        }
+      };
+      const handleSubmit = () => {
+        if (nameError || codeError) return;
+        onSave({ name: name.trim(), description: description.trim(), code: code.trim() });
+      };
+      return (
+        <div className="vscode-card animate-fade-slide-in" style={{ marginBottom: '10px' }}>
+          <div style={{ padding: '10px 12px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '10px' }}>
+              <Terminal size={16} style={{ color: 'var(--vscode-green)' }} />
+              <span style={{ fontWeight: 600, fontSize: '13px' }}>{fnDef ? '编辑自定义函数' : '新建自定义函数'}</span>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '8px' }}>
+              <div>
+                <label style={{ fontSize: '10px', color: 'var(--vscode-text-muted)', display: 'block', marginBottom: '2px' }}>函数名 <span style={{ color: 'var(--vscode-red)' }}>*</span></label>
+                <input className="vscode-input" style={{ fontSize: '12px', padding: '5px 8px' }} placeholder="my_transform"
+                  value={name} onChange={(e) => setName(e.target.value)} />
+                {nameError && <span style={{ fontSize: '9px', color: 'var(--vscode-red)', display: 'block', marginTop: '2px' }}>{nameError}</span>}
+                <span style={{ fontSize: '9px', color: 'var(--vscode-text-muted)', display: 'block', marginTop: '2px' }}>管道中使用: fn:{name || '...'}</span>
+              </div>
+              <div>
+                <label style={{ fontSize: '10px', color: 'var(--vscode-text-muted)', display: 'block', marginBottom: '2px' }}>描述</label>
+                <input className="vscode-input" style={{ fontSize: '12px', padding: '5px 8px' }} placeholder="简要描述函数功能..."
+                  value={description} onChange={(e) => setDescription(e.target.value)} />
+              </div>
+            </div>
+            <div style={{ marginBottom: '8px' }}>
+              <label style={{ fontSize: '10px', color: 'var(--vscode-text-muted)', display: 'block', marginBottom: '2px' }}>函数代码 <span style={{ color: 'var(--vscode-red)' }}>*</span></label>
+              <div style={{ position: 'relative' }}>
+                <textarea className="vscode-input"
+                  style={{ minHeight: '110px', fontSize: '12px', fontFamily: "'Cascadia Code','JetBrains Mono','Fira Code','SF Mono','Consolas',monospace", lineHeight: '1.6', resize: 'vertical' }}
+                  spellCheck={false}
+                  placeholder={`// 编写函数体，参数 val 是输入字符串\n// 使用 return 返回处理后的值\n\nreturn val.replace(/\\s+/g, ' ').trim().toUpperCase();`}
+                  value={code} onChange={(e) => setCode(e.target.value)} />
+                <span style={{ position: 'absolute', top: '4px', right: '8px', fontSize: '9px', color: 'var(--vscode-text-muted)', fontFamily: 'monospace' }}>JavaScript</span>
+              </div>
+              {codeError && <span style={{ fontSize: '9px', color: 'var(--vscode-red)', display: 'block', marginTop: '2px' }}>{codeError}</span>}
+            </div>
+            <div style={{ marginBottom: '10px' }}>
+              <button className="vscode-btn vscode-btn-ghost vscode-btn-sm"
+                onClick={() => setShowTest(!showTest)}
+                style={{ fontSize: '11px' }}>
+                <Play size={11} />{showTest ? '收起测试' : '测试函数'}</button>
+              {showTest && (
+                <div style={{ marginTop: '6px', padding: '8px', background: 'var(--vscode-input)', borderRadius: '3px' }}>
+                  <div style={{ display: 'flex', gap: '6px', marginBottom: '6px' }}>
+                    <input className="vscode-input" style={{ fontSize: '11px', padding: '4px 8px', flex: 1 }}
+                      placeholder="测试输入..." value={testInput} onChange={(e) => setTestInput(e.target.value)} />
+                    <button className="vscode-btn vscode-btn-outline vscode-btn-sm" onClick={handleTest}><Play size={10} />运行</button>
+                  </div>
+                  {testError && <div style={{ padding: '6px 8px', background: 'rgba(244,71,71,0.1)', borderRadius: '3px', fontSize: '10px', color: 'var(--vscode-red)', display: 'flex', alignItems: 'flex-start', gap: '4px' }}><AlertTriangle size={11} style={{ flexShrink: 0, marginTop: '1px' }} />{testError}</div>}
+                  {testOutput !== '' && !testError && (
+                    <div className="vscode-code-block" style={{ maxHeight: '80px', fontSize: '11px', padding: '6px 8px', color: 'var(--vscode-green)' }}>{testOutput}</div>)}
+                </div>
+              )}
+            </div>
+            <div style={{ display: 'flex', gap: '6px', justifyContent: 'flex-end' }}>
+              {onCancel && <button className="vscode-btn vscode-btn-ghost vscode-btn-sm" onClick={onCancel}>取消</button>}
+              <button className="vscode-btn vscode-btn-primary vscode-btn-sm"
+                onClick={handleSubmit} disabled={!!nameError || !!codeError}
+                style={{ opacity: (!!nameError || !!codeError) ? 0.5 : 1 }}>
+                <Save size={12} />{fnDef ? '更新函数' : '保存函数'}</button>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // ==================== 主应用 ====================
+    function App() {
+      const store = useStore();
+      const {
+        template, inputs, setTemplate, setInput, clearAll, loadPreset,
+        expandedRef, setExpandedRef, lastCopied, setLastCopied,
+        customFunctions, templateLibrary, history,
+        addCustomFunction, updateCustomFunction, deleteCustomFunction,
+        saveToLibrary, deleteFromLibrary, loadFromLibrary,
+        restoreFromHistory, clearHistory, deleteHistoryEntry,
+        fixHistoryToLibrary, exportTemplateLibrary, exportCustomFunctions, exportAll, importData,
+        activeTab, setActiveTab, toastMessage, showToast,
+        sidebarCollapsed, toggleSidebar,
+        slotPanelCollapsed, toggleSlotPanel,
+      } = store;
+
+      const slots = React.useMemo(() => parseSlots(template), [template]);
+      const uniqueSlotNames = React.useMemo(() => getUniqueSlotNames(template), [template]);
+      const slotCount = uniqueSlotNames.length;
+      const result = React.useMemo(() => computeResult(template, inputs, customFunctions), [template, inputs,
+        customFunctions
+      ]);
+      const resultCharCount = result.length;
+      const hasTemplate = template.trim().length > 0;
+      const hasResult = result.trim().length > 0;
+
+      // 确认弹窗状态
+      const [confirmDialog, setConfirmDialog] = React.useState(null);
+      // URL导入状态
+      const [showUrlImport, setShowUrlImport] = React.useState(false);
+      const [urlImportValue, setUrlImportValue] = React.useState('');
+      const [urlImportTarget, setUrlImportTarget] = React.useState('all'); // 'all' | 'library' | 'functions'
+      const [urlImportLoading, setUrlImportLoading] = React.useState(false);
+
+      // 隐藏的文件输入引用
+      const fileInputRef = React.useRef(null);
+      const [fileImportTarget, setFileImportTarget] = React.useState('all');
+
+      const handleCopyResult = async () => {
+        if (!hasResult) return;
+        try {
+          await navigator.clipboard.writeText(result);
+          setLastCopied("result");
+          setTimeout(() => setLastCopied(null), 2000);
+        } catch {
+          const ta = document.createElement("textarea");
+          ta.value = result;
+          ta.style.cssText = "position:fixed;opacity:0";
+          document.body.appendChild(ta);
+          ta.select();
+          document.execCommand("copy");
+          document.body.removeChild(ta);
+          setLastCopied("result");
+          setTimeout(() => setLastCopied(null), 2000);
+        }
+      };
+      const handleCopyTemplate = async () => {
+        if (!hasTemplate) return;
+        try {
+          await navigator.clipboard.writeText(template);
+          setLastCopied("template");
+          setTimeout(() => setLastCopied(null), 2000);
+        } catch {
+          setLastCopied("template");
+          setTimeout(() => setLastCopied(null), 2000);
+        }
+      };
+      const handleLoadPreset = (preset) => {
+        loadPreset(preset);
+        setActiveTab('workbench');
+      };
+
+      // 下载JSON文件
+      const downloadJSON = (filename, jsonString) => {
+        const blob = new Blob([jsonString], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      };
+
+      // 处理文件导入
+      const handleFileImport = (target = 'all') => {
+        setFileImportTarget(target);
+        if (fileInputRef.current) {
+          fileInputRef.current.click();
+        }
+      };
+
+      const handleFileSelected = (e) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = (ev) => {
+          try {
+            importData(ev.target.result);
+          } catch (err) {
+            showToast('❌ 文件解析失败');
+          }
+        };
+        reader.onerror = () => showToast('❌ 文件读取失败');
+        reader.readAsText(file);
+        // 重置input以便可以重新选择同一文件
+        if (fileInputRef.current) fileInputRef.current.value = '';
+      };
+
+      // 处理URL导入
+      const handleUrlImport = async () => {
+        if (!urlImportValue.trim()) {
+          showToast('⚠️ 请输入URL');
+          return;
+        }
+        setUrlImportLoading(true);
+        try {
+          const resp = await fetch(urlImportValue.trim());
+          if (!resp.ok) throw new Error(`HTTP ${resp.status}: ${resp.statusText}`);
+          const text = await resp.text();
+          importData(text);
+          setShowUrlImport(false);
+          setUrlImportValue('');
+        } catch (err) {
+          showToast(`❌ URL导入失败: ${err.message}`);
+        } finally {
+          setUrlImportLoading(false);
+        }
+      };
+
+      const [showSaveDialog, setShowSaveDialog] = React.useState(false);
+      const [saveName, setSaveName] = React.useState('');
+      const [saveDesc, setSaveDesc] = React.useState('');
+      const [saveTags, setSaveTags] = React.useState('');
+      const [saveSourceHistoryId, setSaveSourceHistoryId] = React.useState(null);
+      const [editingFn, setEditingFn] = React.useState(null);
+      const [showNewFn, setShowNewFn] = React.useState(false);
+      const [historyExpanded, setHistoryExpanded] = React.useState(false);
+      const [libSearch, setLibSearch] = React.useState('');
+      const [libSubTab, setLibSubTab] = React.useState('saved');
+
+      const filteredLibrary = React.useMemo(() => {
+        if (!libSearch.trim()) return templateLibrary;
+        const q = libSearch.toLowerCase();
+        return templateLibrary.filter(e =>
+          e.name.toLowerCase().includes(q) ||
+          e.description.toLowerCase().includes(q) ||
+          (e.tags || []).some(t => t.toLowerCase().includes(q)) ||
+          e.template.toLowerCase().includes(q)
+        );
+      }, [templateLibrary, libSearch]);
+
+      const filteredHistory = React.useMemo(() => {
+        if (!libSearch.trim()) return history;
+        const q = libSearch.toLowerCase();
+        return history.filter(e =>
+          e.label.toLowerCase().includes(q) ||
+          e.template.toLowerCase().includes(q)
+        );
+      }, [history, libSearch]);
+
+      const existingFnNames = React.useMemo(() => customFunctions.map(f => f.name), [customFunctions]);
+
+      const sidebarNavItems = [
+        { id: 'workbench', label: '工作台', icon: <Home size={15} /> },
+        { id: 'library', label: '模板库', icon: <Library size={15} />, badge: templateLibrary.length },
+        {
+          id: 'functions', label: '自定义函数', icon: <FunctionSquare size={15} />, badge: customFunctions
+            .length
+        },
+      ];
+
+      const sidebarWidth = sidebarCollapsed ? 0 : 200;
+
+      const handleOpenSaveDialog = (historyId = null) => {
+        if (historyId) {
+          const entry = history.find(h => h.id === historyId);
+          setSaveSourceHistoryId(historyId);
+          setSaveName(entry ? (entry.label.slice(0, 50) || '历史模板') : '历史模板');
+        } else {
+          setSaveSourceHistoryId(null);
+          setSaveName('');
+        }
+        setSaveDesc('');
+        setSaveTags('');
+        setShowSaveDialog(true);
+      };
+
+      const handleConfirmSave = () => {
+        if (saveSourceHistoryId) {
+          const entry = history.find(h => h.id === saveSourceHistoryId);
+          if (entry) {
+            saveToLibrary(
+              saveName || '未命名模板',
+              saveDesc,
+              saveTags.split(',').map(t => t.trim()).filter(Boolean),
+              entry.template,
+              entry.inputs
+            );
+          }
+        } else {
+          saveToLibrary(saveName || '未命名模板', saveDesc, saveTags.split(',').map(t => t.trim()).filter(
+            Boolean));
+        }
+        setShowSaveDialog(false);
+        setSaveSourceHistoryId(null);
+      };
+
+      const handleQuickFix = (historyId) => {
+        const entry = history.find(h => h.id === historyId);
+        if (!entry) return;
+        const autoName = '历史模板 - ' + new Date(entry.timestamp).toLocaleString('zh-CN', {
+          month: 'short',
+          day: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit'
+        });
+        fixHistoryToLibrary(historyId, autoName);
+      };
+
+      // Monaco Editor 的加载占位符
+      const MonacoLoadingPlaceholder = () => (
+        <div style={{
+          flex: 1,
+          minHeight: '180px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          background: 'var(--vscode-input)',
+          border: '1px solid var(--vscode-border)',
+          borderRadius: '3px',
+          color: 'var(--vscode-text-muted)',
+          fontSize: '12px',
+          gap: '8px',
+        }}>
+          <RefreshCw size={14} style={{ animation: 'spin 1s linear infinite' }} />
+          正在加载编辑器...
+        </div>
+      );
+
+      return (
+        <div style={{ height: '100vh', width: '100vw', display: 'flex', flexDirection: 'column', overflow: 'hidden', background: 'var(--vscode-bg)' }}>
+          {/* Toast */}
+          {toastMessage && (
+            <div className="vscode-toast toast-animate">{toastMessage}</div>
+          )}
+
+          {/* 确认弹窗 */}
+          {confirmDialog && (
+            <ConfirmDialog {...confirmDialog} />
+          )}
+
+          {/* 隐藏的文件导入input */}
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".json"
+            style={{ display: 'none' }}
+            onChange={handleFileSelected}
+          />
+
+          {/* URL导入弹窗 */}
+          {showUrlImport && (
+            <div className="confirm-dialog-overlay" onClick={() => {
+              setShowUrlImport(false);
+              setUrlImportValue('');
+            }}>
+              <div className="confirm-dialog animate-fade-slide-in" onClick={(e) => e.stopPropagation()}
+                style={{ maxWidth: '480px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
+                  <Globe size={18} style={{ color: 'var(--vscode-accent)' }} />
+                  <span style={{ fontWeight: 600, fontSize: '13px' }}>从URL导入</span>
+                </div>
+                <p style={{ fontSize: '10px', color: 'var(--vscode-text-muted)', margin: '0 0 8px' }}>
+                  输入一个返回JSON的URL，数据将自动合并到对应类别中。
+                </p>
+                <div className="url-import-input" style={{ marginBottom: '8px' }}>
+                  <Link size={12} style={{ opacity: 0.5, flexShrink: 0 }} />
+                  <input
+                    placeholder="https://example.com/export.json"
+                    value={urlImportValue}
+                    onChange={(e) => setUrlImportValue(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === 'Enter') handleUrlImport(); }}
+                    autoFocus
+                  />
+                </div>
+                <div style={{ display: 'flex', gap: '6px', justifyContent: 'flex-end' }}>
+                  <button className="vscode-btn vscode-btn-ghost vscode-btn-sm"
+                    onClick={() => {
+                      setShowUrlImport(false);
+                      setUrlImportValue('');
+                    }}>取消</button>
+                  <button className="vscode-btn vscode-btn-primary vscode-btn-sm"
+                    onClick={handleUrlImport}
+                    disabled={urlImportLoading || !urlImportValue.trim()}>
+                    {urlImportLoading ? <><RefreshCw size={11} style={{ animation: 'spin 1s linear infinite' }} />加载中...</> : <><Download size={11} />导入</>}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Top Bar */}
+          <header style={{
+            height: '38px', minHeight: '38px', background: 'var(--vscode-topbar)',
+            borderBottom: '1px solid var(--vscode-border)', display: 'flex',
+            alignItems: 'center', justifyContent: 'space-between',
+            padding: '0 10px', userSelect: 'none', zIndex: 100
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <button className="vscode-btn-icon vscode-btn-icon-sm"
+                onClick={toggleSidebar}
+                title={sidebarCollapsed ? '展开侧边栏' : '收起侧边栏'}
+                style={{ color: 'var(--vscode-text-secondary)' }}>
+                <ListTree size={15} />
+              </button>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <div style={{ width: '20px', height: '20px', borderRadius: '4px', background: 'linear-gradient(135deg, rgba(86,156,214,0.3), rgba(78,201,176,0.3))', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <Sparkles size={12} style={{ color: 'var(--vscode-accent)' }} /></div>
+                <span style={{ fontWeight: 600, fontSize: '13px', color: 'var(--vscode-text)', letterSpacing: '0.2px' }}>Prompt 合并工具</span>
+              </div>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+              <a href="https://github.com" target="_blank" rel="noopener noreferrer"
+                className="vscode-btn-icon vscode-btn-icon-sm"
+                title="GitHub"
+                style={{ color: 'var(--vscode-text-secondary)' }}>
+                <GitHubIcon size={15} />
+              </a>
+            </div>
+          </header>
+
+          {/* Body */}
+          <div style={{ flex: 1, display: 'flex', overflow: 'hidden', minHeight: 0 }}>
+            {/* Sidebar */}
+            <aside style={{
+              width: `${sidebarWidth}px`, minWidth: sidebarCollapsed ? 0 : '180px',
+              background: 'var(--vscode-sidebar)', borderRight: sidebarCollapsed ? 'none' : '1px solid var(--vscode-border)',
+              display: 'flex', flexDirection: 'column', overflow: 'hidden',
+              transition: 'width 0.18s ease, min-width 0.18s ease',
+              flexShrink: 0
+            }}>
+              {!sidebarCollapsed && (
+                <>
+                  <nav style={{ padding: '6px 0', flex: 1, overflowY: 'auto' }}>
+                    {sidebarNavItems.map(item => (
+                      <div key={item.id} className={`sidebar-nav-item ${activeTab === item.id ? 'active' : ''}`}
+                        onClick={() => setActiveTab(item.id)}>
+                        <span className="nav-icon">{item.icon}</span>
+                        <span style={{ flex: 1 }}>{item.label}</span>
+                        {item.badge > 0 && <span className="nav-badge">{item.badge}</span>}
+                      </div>
+                    ))}
+                  </nav>
+                  <div style={{ padding: '8px 10px', borderTop: '1px solid var(--vscode-border)', fontSize: '10px', color: 'var(--vscode-text-muted)' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                      <History size={11} />历史 {history.length} 条
+                    </div>
+                    {history.slice(0, 5).map(entry => (
+                      <div key={entry.id} style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: '3px 0', cursor: 'pointer', fontSize: '10px' }}
+                        onClick={() => { restoreFromHistory(entry.id); setActiveTab('workbench'); }}
+                        title={entry.label}>
+                        <Clock size={9} style={{ opacity: 0.5, flexShrink: 0 }} />
+                        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>{entry.label.slice(0, 35)}</span>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
+            </aside>
+
+            {/* Main Content */}
+            <main style={{
+              flex: 1, overflow: 'auto', background: 'var(--vscode-bg)',
+              padding: '12px 14px', minWidth: 0
+            }}>
+              {/* 工作台 - 三列布局 */}
+              {activeTab === 'workbench' && (
+                <div className="animate-fade-slide-in" style={{ height: '100%', minHeight: 0 }}>
+                  <div style={{
+                    display: 'grid',
+                    gridTemplateColumns: slotPanelCollapsed
+                      ? '1fr 34px 1.6fr'
+                      : '1fr 320px 1.3fr',
+                    gap: '8px',
+                    height: '100%',
+                    minHeight: 0,
+                    transition: 'grid-template-columns 0.22s ease'
+                  }}>
+                    {/* 左列：模板编辑 + 转换器参考 + 历史 */}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', overflow: 'auto', minHeight: 0 }}>
+                      <div className="vscode-card" style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+                        <div className="vscode-card-header">
+                          <FileText size={13} style={{ color: 'var(--vscode-accent)' }} />模板编辑
+                          {hasTemplate && <span className="vscode-badge vscode-badge-accent" style={{ marginLeft: 'auto' }}>{slotCount} 插槽</span>}
+                          <span style={{ fontSize: '10px', color: 'var(--vscode-text-muted)', marginLeft: '4px' }}>{template.length} 字符</span>
+                          <button className="vscode-btn-icon vscode-btn-icon-sm" onClick={handleCopyTemplate} title="复制模板"
+                            style={{ marginLeft: '2px' }}>
+                            {lastCopied === "template" ? <Check size={11} style={{ color: 'var(--vscode-green)' }} /> : <Copy size={11} />}
+                          </button>
+                        </div>
+                        <div style={{ padding: '8px 10px', flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+                          {/* Monaco Editor 替换原来的 textarea */}
+                          <div className="monaco-editor-container" style={{ flex: 1, minHeight: '200px' }}>
+                            <MonacoEditor
+                              height="100%"
+                              language="markdown"
+                              theme="vs-dark"
+                              value={template}
+                              onChange={(value) => setTemplate(value || '')}
+                              loading={<MonacoLoadingPlaceholder />}
+                              options={{
+                                minimap: { enabled: false },
+                                fontSize: 13,
+                                lineNumbers: 'on',
+                                wordWrap: 'on',
+                                scrollBeyondLastLine: false,
+                                automaticLayout: true,
+                                padding: { top: 10, bottom: 10 },
+                                renderLineHighlight: 'line',
+                                overviewRulerLanes: 0,
+                                hideCursorInOverviewRuler: true,
+                                overviewRulerBorder: false,
+                                scrollbar: {
+                                  vertical: 'auto',
+                                  horizontal: 'auto',
+                                  verticalScrollbarSize: 8,
+                                  horizontalScrollbarSize: 8,
+                                },
+                                fontFamily: "'Cascadia Code', 'JetBrains Mono', 'Fira Code', 'SF Mono', 'Consolas', 'Monaco', monospace",
+                                smoothScrolling: true,
+                                cursorBlinking: 'smooth',
+                                cursorSmoothCaretAnimation: 'on',
+                                bracketPairColorization: { enabled: false },
+                                guides: { indentation: false, bracketPairs: false },
+                              }}
+                            />
+                          </div>
+                          {slotCount > 0 && (
+                            <div style={{ display: 'flex', gap: '3px', flexWrap: 'wrap', marginTop: '6px', alignItems: 'center' }}>
+                              <span style={{ fontSize: '9px', color: 'var(--vscode-text-muted)' }}>插槽：</span>
+                              {uniqueSlotNames.map((name) => (
+                                <span key={name} className="vscode-badge slot-highlight" style={{ fontSize: '9px', gap: '2px', fontFamily: 'monospace' }}>
+                                  <Braces size={8} />{name}
+                                </span>))}
+                            </div>)}
+                          {hasTemplate && (
+                            <button className="vscode-btn vscode-btn-outline vscode-btn-sm"
+                              style={{ alignSelf: 'flex-start', marginTop: '6px' }}
+                              onClick={() => handleOpenSaveDialog(null)}>
+                              <Save size={11} />保存到模板库</button>)}
+                        </div>
+                      </div>
+
+                      {/* 转换器参考 */}
+                      <div className="vscode-card" style={{ maxHeight: expandedRef ? '220px' : 'auto', overflow: 'hidden', transition: 'max-height 0.2s', flexShrink: 0 }}>
+                        <button style={{ width: '100%', display: 'flex', alignItems: 'center', gap: '6px', padding: '7px 10px', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--vscode-text-secondary)', fontSize: '11px', fontWeight: 500 }}
+                          onClick={() => setExpandedRef(!expandedRef)}>
+                          <Info size={12} style={{ color: 'var(--vscode-accent)' }} />可用转换器参考
+                          <span className="vscode-badge" style={{ fontSize: '9px' }}>{Object.keys(transformers).length} 内置 + {customFunctions.length} 自定义</span>
+                          {expandedRef ? <ChevronDown size={10} style={{ marginLeft: 'auto' }} /> : <ChevronRight size={10} style={{ marginLeft: 'auto' }} />}
+                        </button>
+                        {expandedRef && (
+                          <div style={{ padding: '4px 10px 8px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '2px', maxHeight: '160px', overflowY: 'auto', fontSize: '10px' }}>
+                            {Object.entries(transformers).map(([key, meta]) => (
+                              <div key={key} style={{ display: 'flex', alignItems: 'flex-start', gap: '4px', padding: '2px 4px', borderRadius: '2px' }}>
+                                <span style={{ flexShrink: 0 }}>{meta.icon}</span>
+                                <div style={{ minWidth: 0 }}>
+                                  <code style={{ fontSize: '10px', fontWeight: 600, color: 'var(--vscode-accent)', background: 'rgba(86,156,214,0.12)', padding: '1px 4px', borderRadius: '2px', fontFamily: 'monospace' }}>{key}</code>
+                                  <span style={{ color: 'var(--vscode-text-muted)', marginLeft: '3px' }}>{meta.label}</span>
+                                </div>
+                              </div>))}
+                            {customFunctions.map(fn => (
+                              <div key={fn.id} style={{ display: 'flex', alignItems: 'flex-start', gap: '4px', padding: '2px 4px', borderRadius: '2px', borderLeft: '2px solid rgba(78,201,176,0.4)' }}>
+                                <span style={{ flexShrink: 0 }}>⚡</span>
+                                <div style={{ minWidth: 0 }}>
+                                  <code style={{ fontSize: '10px', fontWeight: 600, color: 'var(--vscode-green)', background: 'rgba(78,201,176,0.12)', padding: '1px 4px', borderRadius: '2px', fontFamily: 'monospace' }}>fn:{fn.name}</code>
+                                  <span style={{ color: 'var(--vscode-text-muted)', marginLeft: '3px' }}>{fn.description || '自定义函数'}</span>
+                                </div>
+                              </div>))}
+                          </div>)}
+                      </div>
+
+                      {/* 历史记录 */}
+                      <div className="vscode-card" style={{ maxHeight: historyExpanded ? '200px' : 'auto', overflow: 'hidden', transition: 'max-height 0.2s', flexShrink: 0 }}>
+                        <button style={{ width: '100%', display: 'flex', alignItems: 'center', gap: '6px', padding: '7px 10px', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--vscode-text-secondary)', fontSize: '11px', fontWeight: 500 }}
+                          onClick={() => setHistoryExpanded(!historyExpanded)}>
+                          <Clock size={12} style={{ color: 'var(--vscode-yellow)' }} />历史记录
+                          <span className="vscode-badge" style={{ fontSize: '9px' }}>{history.length} 条</span>
+                          {historyExpanded ? <ChevronDown size={10} style={{ marginLeft: 'auto' }} /> : <ChevronRight size={10} style={{ marginLeft: 'auto' }} />}
+                        </button>
+                        {historyExpanded && (
+                          <div style={{ padding: '4px 10px 8px', maxHeight: '150px', overflowY: 'auto' }}>
+                            {history.length === 0 ? (
+                              <p style={{ fontSize: '10px', color: 'var(--vscode-text-muted)', textAlign: 'center', padding: '10px' }}>暂无历史记录</p>
+                            ) : (
+                              <>
+                                {history.slice(0, 25).map((entry) => (
+                                  <div key={entry.id} style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: '3px 4px', borderRadius: '2px', cursor: 'pointer', fontSize: '10px' }}
+                                    onClick={() => restoreFromHistory(entry.id)}
+                                    title={entry.label}>
+                                    <Clock size={9} style={{ opacity: 0.4, flexShrink: 0 }} />
+                                    <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontFamily: 'monospace', fontSize: '10px' }}>{entry.label}</span>
+                                    <span style={{ fontSize: '9px', color: 'var(--vscode-text-muted)', flexShrink: 0 }}>{new Date(entry.timestamp).toLocaleString('zh-CN', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
+                                    <button className="vscode-btn-icon vscode-btn-icon-sm" onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleOpenSaveDialog(entry.id);
+                                    }}
+                                      title="固定到模板库" style={{ opacity: 0.5, color: 'var(--vscode-accent)' }}><Pin size={9} /></button>
+                                    <button className="vscode-btn-icon vscode-btn-icon-sm" onClick={(e) => {
+                                      e.stopPropagation();
+                                      deleteHistoryEntry(entry.id);
+                                    }}
+                                      title="删除" style={{ opacity: 0.4 }}><X size={9} /></button>
+                                  </div>
+                                ))}
+                                <button className="vscode-btn vscode-btn-ghost vscode-btn-xs"
+                                  onClick={() => {
+                                    setConfirmDialog({
+                                      title: '清空全部历史记录',
+                                      message: `确定要清空全部 ${history.length} 条历史记录吗？此操作不可撤销。`,
+                                      confirmLabel: '清空',
+                                      confirmDanger: true,
+                                      onConfirm: () => {
+                                        clearHistory();
+                                        setConfirmDialog(null);
+                                      },
+                                      onCancel: () => setConfirmDialog(null),
+                                    });
+                                  }}
+                                  style={{ color: 'var(--vscode-red)', opacity: 0.7, marginTop: '4px', fontSize: '10px' }}>
+                                  清空全部历史</button>
+                              </>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* 中列：插槽输入（可折叠） */}
+                    {!slotPanelCollapsed ? (
+                      <div className="vscode-card" style={{ display: 'flex', flexDirection: 'column', minHeight: 0, overflow: 'hidden' }}>
+                        <div className="vscode-card-header">
+                          <Braces size={13} style={{ color: 'var(--vscode-green)' }} />插槽输入
+                          {slotCount > 0 && <span className="vscode-badge vscode-badge-success" style={{ marginLeft: 'auto' }}>{slotCount} 变量</span>}
+                          <button className="vscode-btn-icon vscode-btn-icon-sm"
+                            onClick={toggleSlotPanel}
+                            title="收起插槽面板"
+                            style={{ marginLeft: '2px', opacity: 0.6 }}>
+                            <PanelLeftClose size={12} />
+                          </button>
+                        </div>
+                        <div style={{ padding: '6px 8px', flex: 1, overflowY: 'auto', minHeight: 0 }}>
+                          {slotCount === 0 ? (
+                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '30px 10px', color: 'var(--vscode-text-muted)', gap: '8px', textAlign: 'center' }}>
+                              <Braces size={24} style={{ opacity: 0.3 }} />
+                              <p style={{ fontSize: '11px' }}>{hasTemplate ? "模板中未检测到插槽" : "请先在左侧编写模板"}</p>
+                              {!hasTemplate && (
+                                <button className="vscode-btn vscode-btn-primary vscode-btn-sm" onClick={() => setActiveTab('library')}><Library size={10} />浏览模板库</button>)}
+                            </div>
+                          ) : (
+                            uniqueSlotNames.map((slotName) => {
+                              const allTfs = getAllTransformersForName(template, slotName);
+                              return (
+                                <SlotInputCard key={slotName} slotName={slotName} allTransformers={allTfs}
+                                  value={inputs[slotName] || ""} onChange={setInput} template={template} customFns={customFunctions} />);
+                            })
+                          )}
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="slot-collapsed-bar"
+                        onClick={toggleSlotPanel}
+                        title="展开插槽面板">
+                        <PanelLeftOpen size={14} style={{ writingMode: 'horizontal-tb', marginBottom: '4px' }} />
+                        <span>插槽</span>
+                        {slotCount > 0 && <span className="badge-dot" style={{ writingMode: 'horizontal-tb', marginTop: '4px' }}></span>}
+                        {slotCount > 0 && <span style={{ fontSize: '9px', writingMode: 'horizontal-tb' }}>{slotCount}</span>}
+                      </div>
+                    )}
+
+                    {/* 右列：合并结果 */}
+                    <div className="vscode-card" style={{ display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+                      <div className="vscode-card-header">
+                        <Wand2 size={13} style={{ color: 'var(--vscode-orange)' }} />合并结果
+                        {hasResult && <span className="vscode-badge" style={{ marginLeft: 'auto', background: 'rgba(206,145,120,0.2)', color: 'var(--vscode-orange)' }}>{resultCharCount} 字符</span>}
+                        <button className={`vscode-btn ${lastCopied === "result" ? "vscode-btn-ghost" : "vscode-btn-primary"} vscode-btn-sm`}
+                          onClick={handleCopyResult} disabled={!hasResult}
+                          style={{ marginLeft: '6px', color: lastCopied === "result" ? 'var(--vscode-green)' : undefined }}>
+                          {lastCopied === "result" ? <><Check size={11} />已复制</> : <><Clipboard size={11} />复制结果</>}
+                        </button>
+                        {slotPanelCollapsed && (
+                          <button className="vscode-btn-icon vscode-btn-icon-sm"
+                            onClick={toggleSlotPanel}
+                            title="展开插槽面板"
+                            style={{ marginLeft: '2px', opacity: 0.6 }}>
+                            <PanelLeftOpen size={12} />
+                          </button>
+                        )}
+                      </div>
+                      <div style={{ padding: '8px 10px', flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+                        {hasResult ? (
+                          <div className="vscode-code-block" style={{ flex: 1, maxHeight: 'none', fontSize: '12px', overflow: 'auto' }}>{result}</div>
+                        ) : (
+                          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', flex: 1, color: 'var(--vscode-text-muted)', gap: '4px' }}>
+                            <RefreshCw size={22} style={{ opacity: 0.25 }} />
+                            <p style={{ fontSize: '11px' }}>{hasTemplate ? "请填写插槽输入值以生成结果" : "等待模板和输入..."}</p>
+                          </div>)}
+                        {hasResult && (
+                          <div style={{ display: 'flex', gap: '10px', fontSize: '9px', color: 'var(--vscode-text-muted)', marginTop: '6px', flexWrap: 'wrap', flexShrink: 0 }}>
+                            <span>替换：{slots.length} 处</span><span>变量：{uniqueSlotNames.length} 个</span>
+                            <span>已填写：{uniqueSlotNames.filter((n) => inputs[n] && inputs[n].trim().length > 0).length} / {uniqueSlotNames.length}</span>
+                          </div>)}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* 模板库 */}
+              {activeTab === 'library' && (
+                <div className="animate-fade-slide-in" style={{ height: '100%', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0', flexWrap: 'wrap', gap: '6px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <Library size={16} style={{ color: 'var(--vscode-accent)' }} />
+                      <span style={{ fontWeight: 600, fontSize: '14px' }}>模板库</span>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                      <div className="vscode-search" style={{ width: '180px' }}>
+                        <Search size={12} className="search-icon" />
+                        <input placeholder={libSubTab === 'saved' ? '搜索已保存模板...' : '搜索历史记录...'} value={libSearch} onChange={(e) => setLibSearch(e.target.value)} />
+                        {libSearch && <button onClick={() => setLibSearch('')} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, color: 'var(--vscode-text-muted)' }}><X size={11} /></button>}
+                      </div>
+                      {libSubTab === 'saved' && (
+                        <>
+                          <button className="vscode-btn vscode-btn-outline vscode-btn-sm"
+                            onClick={() => {
+                              const json = exportTemplateLibrary();
+                              downloadJSON(`prompt-templates-${new Date().toISOString().slice(0, 10)}.json`, json);
+                              showToast('📤 模板库已导出');
+                            }}
+                            title="导出模板库JSON">
+                            <FileDown size={11} />导出
+                          </button>
+                          <button className="vscode-btn vscode-btn-outline vscode-btn-sm"
+                            onClick={() => handleFileImport('library')}
+                            title="从文件导入模板库">
+                            <Upload size={11} />导入文件
+                          </button>
+                          <button className="vscode-btn vscode-btn-outline vscode-btn-sm"
+                            onClick={() => {
+                              setShowUrlImport(true);
+                              setUrlImportTarget('library');
+                              setUrlImportValue('');
+                            }}
+                            title="从URL导入模板库">
+                            <Globe size={11} />URL导入
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* 子标签 */}
+                  <div style={{ display: 'flex', gap: '0', borderBottom: '1px solid var(--vscode-border)', marginBottom: '10px', marginTop: '8px' }}>
+                    <button
+                      className={`lib-tab ${libSubTab === 'saved' ? 'active' : ''}`}
+                      onClick={() => setLibSubTab('saved')}>
+                      <Save size={12} />已保存
+                      <span className="vscode-badge" style={{ fontSize: '9px' }}>{templateLibrary.length}</span>
+                    </button>
+                    <button
+                      className={`lib-tab ${libSubTab === 'history' ? 'active' : ''}`}
+                      onClick={() => setLibSubTab('history')}>
+                      <Clock size={12} />历史记录
+                      <span className="vscode-badge" style={{ fontSize: '9px', background: 'rgba(220,220,170,0.18)', color: 'var(--vscode-yellow)' }}>{history.length}</span>
+                      <span style={{ fontSize: '9px', color: 'var(--vscode-text-muted)', marginLeft: '2px' }}>临时</span>
+                    </button>
+                  </div>
+
+                  <div style={{ flex: 1, overflowY: 'auto', minHeight: 0 }}>
+                    {/* 已保存模板 */}
+                    {libSubTab === 'saved' && (
+                      <>
+                        {filteredLibrary.length === 0 ? (
+                          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '40px', color: 'var(--vscode-text-muted)', gap: '8px' }}>
+                            <FolderOpen size={32} style={{ opacity: 0.25 }} />
+                            <p style={{ fontSize: '11px' }}>{templateLibrary.length === 0 ? '模板库为空，在工作台编辑模板后点击"保存到模板库"或从历史记录固定模板' : '没有匹配的模板'}</p>
+                            {templateLibrary.length === 0 && (
+                              <button className="vscode-btn vscode-btn-outline vscode-btn-sm" onClick={() => setActiveTab('workbench')}>
+                                <ArrowLeft size={10} />前往工作台</button>)}
+                          </div>
+                        ) : (
+                          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: '8px' }}>
+                            {filteredLibrary.map((entry) => (
+                              <div key={entry.id} className="vscode-card" style={{ padding: '10px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                                <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
+                                  <div style={{ flex: 1, minWidth: 0 }}>
+                                    <span style={{ fontWeight: 600, fontSize: '12px' }}>{entry.name}</span>
+                                    {entry.description && <p style={{ fontSize: '10px', color: 'var(--vscode-text-muted)', margin: '2px 0 0' }}>{entry.description}</p>}
+                                  </div>
+                                  <div style={{ display: 'flex', gap: '1px', flexShrink: 0 }}>
+                                    <button className="vscode-btn-icon vscode-btn-icon-sm" onClick={() => { loadFromLibrary(entry.id); setActiveTab('workbench'); }} title="加载到工作台"><Download size={11} /></button>
+                                    <button className="vscode-btn-icon vscode-btn-icon-sm"
+                                      onClick={() => {
+                                        setConfirmDialog({
+                                          title: '删除模板',
+                                          message: `确定要删除模板"${entry.name}"吗？此操作不可撤销。`,
+                                          confirmLabel: '删除',
+                                          confirmDanger: true,
+                                          onConfirm: () => {
+                                            deleteFromLibrary(entry.id);
+                                            setConfirmDialog(null);
+                                          },
+                                          onCancel: () => setConfirmDialog(null),
+                                        });
+                                      }}
+                                      title="删除" style={{ color: 'var(--vscode-red)', opacity: 0.6 }}><Trash2 size={11} /></button>
+                                  </div>
+                                </div>
+                                <div className="vscode-code-block" style={{ maxHeight: '60px', fontSize: '10px', padding: '5px 8px' }}>{entry.template}</div>
+                                <div style={{ display: 'flex', gap: '3px', flexWrap: 'wrap', alignItems: 'center' }}>
+                                  {(entry.tags || []).map((tag, i) => (
+                                    <span key={i} className="vscode-badge" style={{ fontSize: '9px', background: tag === '预设' ? 'rgba(86,156,214,0.18)' : undefined, color: tag === '预设' ? 'var(--vscode-accent)' : undefined }}>{tag}</span>))}
+                                  <span style={{ fontSize: '9px', color: 'var(--vscode-text-muted)', marginLeft: 'auto' }}>
+                                    {new Date(entry.updatedAt || entry.createdAt).toLocaleString('zh-CN', { month: 'short', day: 'numeric' })}</span>
+                                </div>
+                              </div>))}
+                          </div>)}
+                      </>
+                    )}
+
+                    {/* 历史记录（临时模板） */}
+                    {libSubTab === 'history' && (
+                      <>
+                        {filteredHistory.length === 0 ? (
+                          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '40px', color: 'var(--vscode-text-muted)', gap: '8px' }}>
+                            <Clock size={32} style={{ opacity: 0.25 }} />
+                            <p style={{ fontSize: '11px' }}>{history.length === 0 ? '暂无历史记录，在工作台编辑模板后将自动记录' : '没有匹配的历史记录'}</p>
+                          </div>
+                        ) : (
+                          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: '8px' }}>
+                            {filteredHistory.map((entry) => (
+                              <div key={entry.id} className="vscode-card" style={{ padding: '10px', display: 'flex', flexDirection: 'column', gap: '6px', borderLeft: '3px solid rgba(220,220,170,0.35)' }}>
+                                <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
+                                  <div style={{ flex: 1, minWidth: 0 }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                      <span className="vscode-badge" style={{ fontSize: '9px', background: 'rgba(220,220,170,0.2)', color: 'var(--vscode-yellow)' }}>临时</span>
+                                      <span style={{ fontWeight: 600, fontSize: '12px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{entry.label.slice(0, 40)}</span>
+                                    </div>
+                                    <p style={{ fontSize: '9px', color: 'var(--vscode-text-muted)', margin: '3px 0 0' }}>
+                                      <Clock size={9} style={{ display: 'inline', marginRight: '2px' }} />
+                                      {new Date(entry.timestamp).toLocaleString('zh-CN', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                                    </p>
+                                  </div>
+                                  <div style={{ display: 'flex', gap: '1px', flexShrink: 0 }}>
+                                    <button className="vscode-btn-icon vscode-btn-icon-sm"
+                                      onClick={() => handleQuickFix(entry.id)}
+                                      title="快速固定到模板库"
+                                      style={{ color: 'var(--vscode-accent)' }}>
+                                      <Pin size={11} /></button>
+                                    <button className="vscode-btn-icon vscode-btn-icon-sm"
+                                      onClick={() => handleOpenSaveDialog(entry.id)}
+                                      title="固定并命名..."
+                                      style={{ color: 'var(--vscode-green)', opacity: 0.7 }}>
+                                      <Save size={11} /></button>
+                                    <button className="vscode-btn-icon vscode-btn-icon-sm" onClick={() => { restoreFromHistory(entry.id); setActiveTab('workbench'); }} title="加载到工作台"><Download size={11} /></button>
+                                    <button className="vscode-btn-icon vscode-btn-icon-sm" onClick={() => deleteHistoryEntry(entry.id)} title="删除" style={{ color: 'var(--vscode-red)', opacity: 0.6 }}><Trash2 size={11} /></button>
+                                  </div>
+                                </div>
+                                <div className="vscode-code-block" style={{ maxHeight: '55px', fontSize: '10px', padding: '5px 8px', opacity: 0.85 }}>{entry.template}</div>
+                                <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap', alignItems: 'center' }}>
+                                  <span style={{ fontSize: '9px', color: 'var(--vscode-text-muted)' }}>
+                                    {Object.keys(entry.inputs || {}).length} 个已填变量
+                                  </span>
+                                  <button className="vscode-btn vscode-btn-ghost vscode-btn-xs"
+                                    onClick={() => handleQuickFix(entry.id)}
+                                    style={{ marginLeft: 'auto', fontSize: '9px', color: 'var(--vscode-accent)' }}
+                                    title="使用自动名称快速固定">
+                                    <Pin size={8} />快速固定</button>
+                                </div>
+                              </div>))}
+                          </div>)}
+                      </>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* 自定义函数 */}
+              {activeTab === 'functions' && (
+                <div className="animate-fade-slide-in" style={{ height: '100%', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px', flexWrap: 'wrap', gap: '6px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <FunctionSquare size={16} style={{ color: 'var(--vscode-green)' }} />
+                      <span style={{ fontWeight: 600, fontSize: '14px' }}>自定义管道函数</span>
+                      <span className="vscode-badge">{customFunctions.length} 个</span>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                      <button className="vscode-btn vscode-btn-primary vscode-btn-sm"
+                        onClick={() => {
+                          setEditingFn(null);
+                          setShowNewFn(true);
+                        }}>
+                        <Plus size={12} />新建函数</button>
+                      <button className="vscode-btn vscode-btn-outline vscode-btn-sm"
+                        onClick={() => {
+                          const json = exportCustomFunctions();
+                          downloadJSON(`prompt-custom-fns-${new Date().toISOString().slice(0, 10)}.json`, json);
+                          showToast('📤 自定义函数已导出');
+                        }}
+                        title="导出自定义函数JSON">
+                        <FileDown size={11} />导出
+                      </button>
+                      <button className="vscode-btn vscode-btn-outline vscode-btn-sm"
+                        onClick={() => handleFileImport('functions')}
+                        title="从文件导入自定义函数">
+                        <Upload size={11} />导入文件
+                      </button>
+                      <button className="vscode-btn vscode-btn-outline vscode-btn-sm"
+                        onClick={() => {
+                          setShowUrlImport(true);
+                          setUrlImportTarget('functions');
+                          setUrlImportValue('');
+                        }}
+                        title="从URL导入自定义函数">
+                        <Globe size={11} />URL导入
+                      </button>
+                      <button className="vscode-btn vscode-btn-outline vscode-btn-sm"
+                        onClick={() => {
+                          const json = exportAll();
+                          downloadJSON(`prompt-merger-full-export-${new Date().toISOString().slice(0, 10)}.json`, json);
+                          showToast('📤 全部数据已导出（模板库+函数）');
+                        }}
+                        title="导出全部数据">
+                        <FileDown size={11} />导出全部
+                      </button>
+                    </div>
+                  </div>
+                  <div style={{ fontSize: '10px', color: 'var(--vscode-text-muted)', marginBottom: '8px' }}>
+                    在模板管道中使用 <code style={{ background: 'var(--vscode-input)', padding: '1px 4px', borderRadius: '2px', fontSize: '10px', fontFamily: 'monospace' }}>fn:函数名</code> 调用。函数接收 <code style={{ background: 'var(--vscode-input)', padding: '1px 4px', borderRadius: '2px', fontSize: '10px', fontFamily: 'monospace' }}>val</code> 参数，需用 <code style={{ background: 'var(--vscode-input)', padding: '1px 4px', borderRadius: '2px', fontSize: '10px', fontFamily: 'monospace' }}>return</code> 返回处理结果。
+                  </div>
+                  <div style={{ flex: 1, overflowY: 'auto', minHeight: 0 }}>
+                    {showNewFn && (
+                      <CustomFunctionEditor
+                        fnDef={null}
+                        existingNames={existingFnNames.filter(n => n !== editingFn?.name)}
+                        onSave={(def) => {
+                          addCustomFunction(def);
+                          setShowNewFn(false);
+                        }}
+                        onCancel={() => setShowNewFn(false)}
+                      />)}
+
+                    {customFunctions.length === 0 && !showNewFn ? (
+                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '40px', color: 'var(--vscode-text-muted)', gap: '8px' }}>
+                        <Code2 size={32} style={{ opacity: 0.25 }} />
+                        <p style={{ fontSize: '11px' }}>暂无自定义函数</p>
+                        <code style={{ fontSize: '10px', fontFamily: 'monospace', background: 'var(--vscode-input)', padding: '4px 10px', borderRadius: '4px', color: 'var(--vscode-text-secondary)' }}>
+                          return val.replace(/\s+/g, ' ').trim().toUpperCase();</code>
+                      </div>
+                    ) : (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                        {customFunctions.map((fn) => (
+                          <div key={fn.id} className="vscode-card" style={{ padding: '8px 10px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                <Terminal size={13} style={{ color: 'var(--vscode-green)' }} />
+                                <code style={{ fontWeight: 600, fontSize: '12px', color: 'var(--vscode-green)', fontFamily: 'monospace' }}>fn:{fn.name}</code>
+                                {fn.description && <span style={{ fontSize: '10px', color: 'var(--vscode-text-muted)' }}>— {fn.description}</span>}
+                              </div>
+                              <div style={{ display: 'flex', gap: '2px' }}>
+                                <button className="vscode-btn-icon vscode-btn-icon-sm" onClick={() => {
+                                  setEditingFn(fn);
+                                  setShowNewFn(false);
+                                }} title="编辑"><Pencil size={11} /></button>
+                                <button className="vscode-btn-icon vscode-btn-icon-sm"
+                                  onClick={() => {
+                                    setConfirmDialog({
+                                      title: '删除自定义函数',
+                                      message: `确定要删除自定义函数"${fn.name}"吗？此操作不可撤销。模板中使用该函数的管道将失效。`,
+                                      confirmLabel: '删除',
+                                      confirmDanger: true,
+                                      onConfirm: () => {
+                                        deleteCustomFunction(fn.id);
+                                        setConfirmDialog(null);
+                                      },
+                                      onCancel: () => setConfirmDialog(null),
+                                    });
+                                  }}
+                                  title="删除" style={{ color: 'var(--vscode-red)', opacity: 0.6 }}><Trash2 size={11} /></button>
+                              </div>
+                            </div>
+                            <div className="vscode-code-block" style={{ maxHeight: '50px', fontSize: '10px', padding: '5px 8px' }}>{fn.code}</div>
+                            <div style={{ fontSize: '9px', color: 'var(--vscode-text-muted)', marginTop: '3px' }}>
+                              创建于 {new Date(fn.createdAt).toLocaleString('zh-CN', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                              {fn.updatedAt && ` · 更新于 ${new Date(fn.updatedAt).toLocaleString('zh-CN', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}`}
+                            </div>
+                            {editingFn?.id === fn.id && (
+                              <div style={{ marginTop: '8px', paddingTop: '8px', borderTop: '1px solid var(--vscode-border)' }}>
+                                <CustomFunctionEditor
+                                  fnDef={fn}
+                                  existingNames={existingFnNames.filter(n => n !== fn.name)}
+                                  onSave={(def) => {
+                                    updateCustomFunction(fn.id, def);
+                                    setEditingFn(null);
+                                  }}
+                                  onCancel={() => setEditingFn(null)}
+                                /></div>)}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </main>
+          </div>
+
+          {/* 保存对话框 */}
+          {showSaveDialog && (
+            <div style={{ position: 'fixed', inset: 0, zIndex: 200, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(2px)' }}
+              onClick={() => {
+                setShowSaveDialog(false);
+                setSaveSourceHistoryId(null);
+              }}>
+              <div className="vscode-card animate-fade-slide-in" style={{ width: '100%', maxWidth: '420px', padding: '14px 16px' }}
+                onClick={(e) => e.stopPropagation()}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '12px' }}>
+                  {saveSourceHistoryId ? <Pin size={15} style={{ color: 'var(--vscode-accent)' }} /> : <Save size={15} style={{ color: 'var(--vscode-accent)' }} />}
+                  <span style={{ fontWeight: 600, fontSize: '13px' }}>
+                    {saveSourceHistoryId ? '固定历史模板到模板库' : '保存到模板库'}
+                  </span>
+                  {saveSourceHistoryId && (
+                    <span className="vscode-badge" style={{ fontSize: '9px', background: 'rgba(220,220,170,0.2)', color: 'var(--vscode-yellow)' }}>从历史记录</span>
+                  )}
+                </div>
+                <div style={{ marginBottom: '8px' }}>
+                  <label style={{ fontSize: '10px', color: 'var(--vscode-text-muted)', display: 'block', marginBottom: '3px' }}>模板名称 <span style={{ color: 'var(--vscode-red)' }}>*</span></label>
+                  <input className="vscode-input" style={{ fontSize: '12px', padding: '5px 8px' }} placeholder="给模板起个名字..."
+                    value={saveName} onChange={(e) => setSaveName(e.target.value)} autoFocus />
+                </div>
+                <div style={{ marginBottom: '8px' }}>
+                  <label style={{ fontSize: '10px', color: 'var(--vscode-text-muted)', display: 'block', marginBottom: '3px' }}>描述</label>
+                  <textarea className="vscode-input" style={{ fontSize: '12px', minHeight: '50px', resize: 'vertical', padding: '5px 8px' }} placeholder="简要描述模板用途..."
+                    rows={2} value={saveDesc} onChange={(e) => setSaveDesc(e.target.value)} />
+                </div>
+                <div style={{ marginBottom: '12px' }}>
+                  <label style={{ fontSize: '10px', color: 'var(--vscode-text-muted)', display: 'block', marginBottom: '3px' }}>标签（逗号分隔）</label>
+                  <input className="vscode-input" style={{ fontSize: '12px', padding: '5px 8px' }} placeholder="例如：翻译, 代码, API"
+                    value={saveTags} onChange={(e) => setSaveTags(e.target.value)} />
+                </div>
+                <div style={{ display: 'flex', gap: '6px', justifyContent: 'flex-end' }}>
+                  <button className="vscode-btn vscode-btn-ghost vscode-btn-sm"
+                    onClick={() => {
+                      setShowSaveDialog(false);
+                      setSaveSourceHistoryId(null);
+                    }}>取消</button>
+                  <button className="vscode-btn vscode-btn-primary vscode-btn-sm"
+                    onClick={handleConfirmSave}
+                    disabled={!saveName.trim()}
+                    style={{ opacity: !saveName.trim() ? 0.5 : 1 }}>
+                    {saveSourceHistoryId ? <><Pin size={11} />固定保存</> : <><Save size={11} />保存</>}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    createRoot(document.getElementById("root")).render(<App />);
+
+    // 添加旋转动画
+    const spinStyle = document.createElement('style');
+    spinStyle.textContent = '@keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}';
+    document.head.appendChild(spinStyle);
+  </script>
+</body>
+
+</html>
