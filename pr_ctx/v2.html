@@ -829,7 +829,7 @@
         const comment = getCommentPrefix(ext)
         const lang = getLanguageTag(ext)
         const fence = content.includes('```') ? '`'.repeat(4) : '`'.repeat(3)
-        context += `${fence}${lang}\n ${comment} ./${path}\n ${content}\n ${fence}\n\n`
+        context += `<!--\npath: ${path}\n-->\n${fence}${lang}\n${content}\n ${fence}\n\n`
       }
 
       context += `
@@ -1029,7 +1029,7 @@ dest: ./目标路径
         const cc = currentContents.get(path)
         if (cc && cc !== null) {
           const maxLen = 4000; const truncated = cc.length > maxLen
-          msg += `当前文件内容：\n\`\`\`${lang}\n${comment} ./${path}\n${cc.substring(0, maxLen)}${truncated ? '\n\n... (内容过长已截断)' : ''}\n\`\`\`\n\n`
+          msg += `当前文件内容：\n\<\!--\npath: ${path}\n-->\n\`\`\`${lang}\n${cc.substring(0, maxLen)}${truncated ? '\n\n... (内容过长已截断)' : ''}\n\`\`\`\n\n`
         }
         msg += '---\n\n'
       }
