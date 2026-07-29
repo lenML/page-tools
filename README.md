@@ -17,6 +17,7 @@ Publish 1 page tools using github pages
 | [pr context](https://lenml.github.io/page-tools/pr_ctx) | pr_ctx | 用来白嫖web端ai | [source](https://github.com/lenml/page-tools/tree/main/pages/pr_ctx) |
 | [Local Red Time](https://lenml.github.io/page-tools/red_light_time) | red_light_time | — | [source](https://github.com/lenml/page-tools/tree/main/pages/red_light_time) |
 | [文本diff](https://lenml.github.io/page-tools/textdiff) | textdiff | 支持 行、句子、词、字符 级别 diff | [source](https://github.com/lenml/page-tools/tree/main/pages/textdiff) |
+| [white board](https://lenml.github.io/page-tools/white_board) | white_board | 无限画布白板工具 | [source](https://github.com/lenml/page-tools/tree/main/pages/white_board) |
 
 # LICENSE
 
