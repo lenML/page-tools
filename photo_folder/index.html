@@ -1,0 +1,645 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>临时图片文件夹 · 深色增强版</title>
+  <!-- FileManager 官方样式 -->
+  <link rel="stylesheet" href="https://esm.sh/@cubone/react-file-manager/dist/style.css">
+
+  <script type="importmap">
+    {
+      "imports": {
+        "react": "https://esm.sh/react@19.2.4",
+        "react/jsx-runtime": "https://esm.sh/react@19.2.4/jsx-runtime",
+        "react-dom/client": "https://esm.sh/react-dom@19.2.4/client",
+        "lucide-react": "https://esm.sh/lucide-react?external=react",
+        "zustand": "https://esm.sh/zustand?external=react",
+        "@cubone/react-file-manager": "https://esm.sh/@cubone/react-file-manager?external=react,react-dom"
+      }
+    }
+  </script>
+  <script type="module" src="https://esm.sh/tsx"></script>
+  <!-- 极少量 tailwind 辅助（克制使用） -->
+  <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+
+  <style id="s"></style>
+  <style>
+    body {
+      margin: 0;
+      background: #0b0f15;
+      font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+      padding: 20px;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+  </style>
+</head>
+
+<body>
+  <div id="root"></div>
+
+  <script type="text/babel">
+    import * as React from "react";
+    window.React = React;
+  </script>
+
+  <script type="text/babel">
+    import { createRoot } from "react-dom/client"
+    import {
+      Plus, Trash2, X, Image as ImageIcon, FolderOpen, UploadCloud,
+      Link, FileImage, Info, Download, Calendar, HardDrive, Maximize2,
+      Clipboard, Check, AlertCircle, Copy
+    } from "lucide-react"
+    import { create } from "zustand"
+    import { FileManager } from "@cubone/react-file-manager"
+
+    /* ======================
+       🔧 极简 CSS-in-JS 工具（完整保留）
+    ====================== */
+    let sheet = document.getElementById("s")
+    let i = 0
+
+    function css(obj) {
+      const cn = "c" + i++
+      function build(o, sel) {
+        let base = "", nested = ""
+        for (let k in o) {
+          const v = o[k]
+          if (typeof v === "object") {
+            if (k === "hover") nested += build(v, sel + ":hover")
+            else nested += build(v, sel + " " + k)
+          } else {
+            const key = k.replace(/[A-Z]/g, m => "-" + m.toLowerCase())
+            base += `${key}:${v};`
+          }
+        }
+        return base ? `${sel}{${base}}${nested}` : nested
+      }
+      sheet.innerHTML += build(obj, "." + cn)
+      return cn
+    }
+
+    function createStyles(base, variants = {}) {
+      const baseClass = css(base)
+      return (props = {}) => {
+        let cls = [baseClass]
+        for (let key in props) {
+          const v = variants[key]?.[props[key]]
+          if (v) cls.push(css(v))
+        }
+        return cls.join(" ")
+      }
+    }
+
+    /* ======================
+       🎨 自定义暗色主题样式（用于容器及覆盖）
+    ====================== */
+    const containerClass = css({
+      maxWidth: "1600px",
+      margin: "0 auto",
+    })
+
+    const headerClass = css({
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "space-between",
+      marginBottom: "20px",
+    })
+
+    const titleClass = css({
+      display: "flex",
+      alignItems: "center",
+      gap: "10px",
+      fontSize: "28px",
+      fontWeight: "600",
+      color: "#e4e7eb",
+    })
+
+    const badgeClass = css({
+      backgroundColor: "#1e293b",
+      color: "#b0c4de",
+      padding: "4px 12px",
+      borderRadius: "40px",
+      fontSize: "15px",
+      fontWeight: "500",
+      marginLeft: "8px",
+    })
+
+    const iconButton = createStyles(
+      {
+        padding: "10px 18px",
+        borderRadius: "40px",
+        border: "none",
+        cursor: "pointer",
+        display: "inline-flex",
+        gap: "8px",
+        alignItems: "center",
+        fontSize: "14px",
+        fontWeight: "500",
+        backgroundColor: "#2563eb",
+        color: "white",
+        boxShadow: "0 4px 8px #00000030",
+        hover: { backgroundColor: "#1d4ed8" }
+      }
+    )
+
+    const clearButton = createStyles(
+      {
+        padding: "8px 18px",
+        borderRadius: "40px",
+        border: "1px solid #475569",
+        background: "#1e293b",
+        cursor: "pointer",
+        display: "flex",
+        gap: "8px",
+        alignItems: "center",
+        fontSize: "14px",
+        fontWeight: "500",
+        color: "#cbd5e1",
+        hover: { backgroundColor: "#4a1e2c", borderColor: "#b91c1c", color: "#fca5a5" }
+      }
+    )
+
+    const modalOverlay = css({
+      position: "fixed", inset: 0, backgroundColor: "#000000b0", backdropFilter: "blur(6px)",
+      display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000
+    })
+
+    const modalContent = css({
+      backgroundColor: "#1e293b", borderRadius: "24px", padding: "24px", maxWidth: "500px",
+      width: "90%", maxHeight: "85vh", overflow: "auto", border: "1px solid #475569",
+      boxShadow: "0 25px 40px #00000080"
+    })
+
+    const modalHeader = css({
+      display: "flex", justifyContent: "space-between", alignItems: "center",
+      marginBottom: "20px", color: "#f1f5f9"
+    })
+
+    // 覆盖 FileManager 内部深色变量
+    const fmOverride = css({
+      "&": {
+        "--color-primary": "#3b82f6",
+        "--color-primary-light": "#60a5fa",
+        "--color-background": "#0f172a",
+        "--color-surface": "#1e293b",
+        "--color-border": "#334155",
+        "--color-text-primary": "#f1f5f9",
+        "--color-text-secondary": "#cbd5e1",
+        "--color-text-tertiary": "#94a3b8",
+        "--color-hover": "#2d3a5e",
+        borderRadius: "20px",
+        overflow: "hidden",
+        boxShadow: "0 20px 35px -8px rgba(0,0,0,0.7)",
+        border: "1px solid #334155",
+      }
+    })
+
+    /* ======================
+       🧠 Zustand Store (管理所有文件，符合 FileManager 结构)
+    ====================== */
+    const useFileStore = create((set, get) => ({
+      files: [],
+      isLoading: false,
+      currentPath: "",
+
+      // 初始化默认文件（模拟数据）
+      initialize: () => {
+        const now = new Date().toISOString()
+        const defaultFiles = [
+          { name: "文档", isDirectory: true, path: "/文档", updatedAt: now },
+          { name: "图片", isDirectory: true, path: "/图片", updatedAt: now },
+          { name: "项目", isDirectory: true, path: "/项目", updatedAt: now },
+          { name: "readme.txt", isDirectory: false, path: "/readme.txt", updatedAt: now, size: 1024 },
+          { name: "logo.png", isDirectory: false, path: "/logo.png", updatedAt: now, size: 24576 },
+          { name: "风景.jpg", isDirectory: false, path: "/图片/风景.jpg", updatedAt: now, size: 512000 },
+          { name: "头像.png", isDirectory: false, path: "/图片/头像.png", updatedAt: now, size: 128000 },
+          { name: "报告.pdf", isDirectory: false, path: "/文档/报告.pdf", updatedAt: now, size: 2048000 },
+        ]
+        set({ files: defaultFiles })
+      },
+
+      // 核心操作
+      setLoading: (val) => set({ isLoading: val }),
+      setCurrentPath: (path) => set({ currentPath: path }),
+
+      addFiles: (newFiles) => set((state) => ({ files: [...state.files, ...newFiles] })),
+
+      updateFile: (path, updates) => set((state) => ({
+        files: state.files.map(f => f.path === path ? { ...f, ...updates } : f)
+      })),
+
+      removeFiles: (paths) => set((state) => ({
+        files: state.files.filter(f => !paths.includes(f.path) && !paths.some(p => f.path.startsWith(p + '/')))
+      })),
+
+      // 重命名处理（含子路径更新）
+      renameFile: (oldPath, newName, isDirectory) => set((state) => {
+        const newPathBase = oldPath.substring(0, oldPath.lastIndexOf('/') + 1) + newName
+        return {
+          files: state.files.map(f => {
+            if (f.path === oldPath) {
+              return { ...f, name: newName, path: newPathBase, updatedAt: new Date().toISOString() }
+            }
+            if (isDirectory && f.path.startsWith(oldPath + '/')) {
+              const relative = f.path.substring(oldPath.length)
+              return { ...f, path: newPathBase + relative }
+            }
+            return f
+          })
+        }
+      }),
+
+      // 移动 / 复制
+      moveItems: (items, destFolder) => set((state) => {
+        const newFiles = state.files.map(f => {
+          const item = items.find(i => i.path === f.path)
+          if (item) {
+            const destPath = destFolder.path === "" ? `/${item.name}` : `${destFolder.path}/${item.name}`
+            return { ...f, path: destPath }
+          }
+          const parentItem = items.find(i => i.isDirectory && f.path.startsWith(i.path + '/'))
+          if (parentItem) {
+            const destBase = destFolder.path === "" ? `/${parentItem.name}` : `${destFolder.path}/${parentItem.name}`
+            const relative = f.path.substring(parentItem.path.length)
+            return { ...f, path: destBase + relative }
+          }
+          return f
+        })
+        return { files: newFiles }
+      }),
+
+      copyItems: (items, destFolder) => set((state) => {
+        const newCopies = []
+        items.forEach(item => {
+          const destPath = destFolder.path === "" ? `/${item.name}` : `${destFolder.path}/${item.name}`
+          newCopies.push({ ...item, path: destPath, updatedAt: new Date().toISOString() })
+          if (item.isDirectory) {
+            const children = state.files.filter(f => f.path.startsWith(item.path + '/'))
+            children.forEach(child => {
+              const relative = child.path.substring(item.path.length)
+              newCopies.push({ ...child, path: destPath + relative, updatedAt: new Date().toISOString() })
+            })
+          }
+        })
+        return { files: [...state.files, ...newCopies] }
+      }),
+    }))
+
+    /* ======================
+       📦 辅助函数：生成图片/文件对象（用于导入模态框）
+    ====================== */
+    function createFileItem(src, extra = {}) {
+      const id = crypto.randomUUID ? crypto.randomUUID() : Date.now() + '-' + Math.random().toString(36)
+      const name = extra.name || (src.startsWith('blob:') ? '本地图片' : (src.startsWith('data:') ? 'Base64图像' : '图片链接'))
+      return {
+        name: name,
+        isDirectory: false,
+        path: `/${name.replace(/\s+/g, '_')}_${Date.now()}`,
+        updatedAt: new Date().toISOString(),
+        size: extra.size || 0,
+        src: src,           // 用于预览的额外字段
+        width: extra.width,
+        height: extra.height,
+        type: extra.type,
+      }
+    }
+
+    async function fetchImageMetadata(src, file) {
+      return new Promise((resolve) => {
+        const meta = { width: 0, height: 0, size: 0, type: 'unknown' }
+        if (file) { meta.size = file.size; meta.type = file.type }
+        const img = new Image()
+        img.crossOrigin = 'anonymous'
+        img.onload = () => {
+          meta.width = img.naturalWidth
+          meta.height = img.naturalHeight
+          if (!meta.size && src.startsWith('blob:')) {
+            fetch(src).then(r => r.blob()).then(b => { meta.size = b.size }).catch(() => { })
+          }
+          resolve(meta)
+        }
+        img.onerror = () => resolve(meta)
+        img.src = src
+      })
+    }
+
+    function formatBytes(bytes) {
+      if (!bytes) return '未知'
+      const k = 1024
+      if (bytes < k) return bytes + ' B'
+      if (bytes < k * k) return (bytes / k).toFixed(1) + ' KB'
+      return (bytes / (k * k)).toFixed(2) + ' MB'
+    }
+
+    /* ======================
+       🪄 导入模态框（保留原有功能，支持纯Base64/URL/文件）
+    ====================== */
+    function ImportModal({ onClose, currentFolderPath = "" }) {
+      const addFiles = useFileStore(s => s.addFiles)
+      const [activeTab, setActiveTab] = React.useState('paste')
+      const [base64Input, setBase64Input] = React.useState('')
+      const [urlInput, setUrlInput] = React.useState('')
+      const [toast, setToast] = React.useState(null)
+      const fileRef = React.useRef(null)
+
+      const showToast = (msg) => { setToast(msg); setTimeout(() => setToast(null), 2000) }
+
+      const processBase64 = async () => {
+        let raw = base64Input.trim()
+        if (!raw) return showToast('请输入Base64内容')
+        let src = raw
+        if (!raw.startsWith('data:') && raw.match(/^[A-Za-z0-9+/=]+$/)) {
+          src = `data:image/png;base64,${raw}`
+        }
+        const newFile = createFileItem(src, { name: 'Base64图片' })
+        const meta = await fetchImageMetadata(src)
+        Object.assign(newFile, meta)
+        addFiles([newFile])
+        showToast('✅ 已添加Base64图片')
+        onClose()
+      }
+
+      const processURL = async () => {
+        const url = urlInput.trim()
+        if (!url) return showToast('请输入图片URL')
+        const newFile = createFileItem(url, { name: url.split('/').pop() || '链接图片' })
+        const meta = await fetchImageMetadata(url)
+        Object.assign(newFile, meta)
+        addFiles([newFile])
+        showToast('✅ 已添加URL图片')
+        onClose()
+      }
+
+      const handleFiles = (files) => {
+        const promises = Array.from(files).map(async f => {
+          if (!f.type.startsWith('image/')) return null
+          const blobUrl = URL.createObjectURL(f)
+          const newFile = createFileItem(blobUrl, { name: f.name, size: f.size, type: f.type })
+          const meta = await fetchImageMetadata(blobUrl, f)
+          Object.assign(newFile, meta)
+          return newFile
+        })
+        Promise.all(promises).then(newFiles => {
+          const valid = newFiles.filter(Boolean)
+          if (valid.length) { addFiles(valid); showToast(`✅ 已添加 ${valid.length} 个文件`) }
+          else showToast('未选择图片文件')
+          onClose()
+        })
+      }
+
+      return (
+        <div className={modalOverlay} onClick={onClose}>
+          <div className={modalContent} onClick={e => e.stopPropagation()}>
+            {toast && <div style={{ position: 'absolute', top: 20, left: '50%', transform: 'translateX(-50%)', background: '#1e293b', color: 'white', padding: '8px 20px', borderRadius: 40, border: '1px solid #3b82f6' }}>{toast}</div>}
+            <div className={modalHeader}>
+              <h2 style={{ margin: 0, display: 'flex', gap: 8 }}><UploadCloud size={24} /> 导入图片</h2>
+              <button onClick={onClose} style={{ background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer' }}><X size={22} /></button>
+            </div>
+            <div style={{ display: 'flex', gap: 8, marginBottom: 24, borderBottom: '1px solid #334155' }}>
+              {['paste', 'url', 'file'].map(t => (
+                <button key={t} onClick={() => setActiveTab(t)} style={{ background: 'none', border: 'none', padding: '8px 16px', color: activeTab === t ? '#60a5fa' : '#94a3b8', borderBottom: activeTab === t ? '2px solid #3b82f6' : '2px solid transparent', fontWeight: 500, cursor: 'pointer' }}>
+                  {t === 'paste' ? '粘贴Base64' : t === 'url' ? '网址' : '本地文件'}
+                </button>
+              ))}
+            </div>
+            {activeTab === 'paste' && (
+              <div>
+                <label style={{ color: '#cbd5e1', marginBottom: 8, display: 'block' }}>纯Base64 (不带 data:image 前缀)</label>
+                <textarea value={base64Input} onChange={e => setBase64Input(e.target.value)} placeholder="iVBORw0KGgoAAAANS..." style={{ width: '100%', minHeight: 120, background: '#0f172a', border: '1px solid #475569', borderRadius: 12, padding: 12, color: 'white', resize: 'vertical' }} />
+                <button onClick={processBase64} style={{ marginTop: 16, ...primaryBtnStyle }}><Clipboard size={16} /> 导入Base64</button>
+              </div>
+            )}
+            {activeTab === 'url' && (
+              <div>
+                <label style={{ color: '#cbd5e1', marginBottom: 8, display: 'block' }}>图片URL (http / data:image)</label>
+                <input value={urlInput} onChange={e => setUrlInput(e.target.value)} placeholder="https://..." style={{ width: '100%', background: '#0f172a', border: '1px solid #475569', borderRadius: 40, padding: '12px 16px', color: 'white' }} />
+                <button onClick={processURL} style={{ marginTop: 16, ...primaryBtnStyle }}><Link size={16} /> 添加URL</button>
+              </div>
+            )}
+            {activeTab === 'file' && (
+              <div style={{ textAlign: 'center' }}>
+                <input type="file" accept="image/*" multiple ref={fileRef} style={{ display: 'none' }} onChange={e => { if (e.target.files) handleFiles(e.target.files); e.target.value = '' }} />
+                <button onClick={() => fileRef.current?.click()} style={{ ...primaryBtnStyle, width: '100%', justifyContent: 'center' }}><FileImage size={18} /> 选择图片文件</button>
+                <p style={{ color: '#8295b3', marginTop: 16, fontSize: 13 }}>支持多选，拖拽到页面也可</p>
+              </div>
+            )}
+          </div>
+        </div>
+      )
+    }
+
+    const primaryBtnStyle = { background: '#2563eb', border: 'none', borderRadius: 40, padding: '12px 20px', color: 'white', display: 'flex', gap: 8, alignItems: 'center', justifyContent: 'center', cursor: 'pointer', fontWeight: 500 }
+
+    /* ======================
+       🖼️ 详情模态框（查看大图与信息）
+    ====================== */
+    function DetailModal({ file, onClose }) {
+      if (!file) return null
+      const meta = { width: file.width, height: file.height, size: file.size, type: file.type }
+      return (
+        <div className={modalOverlay} onClick={onClose}>
+          <div style={{ backgroundColor: '#0f172a', borderRadius: 24, padding: 24, maxWidth: 'min(90vw, 1000px)', width: 'fit-content', maxHeight: '90vh', overflow: 'auto', border: '1px solid #334155' }} onClick={e => e.stopPropagation()}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 16, color: '#e2e8f0' }}>
+              <h3 style={{ margin: 0, display: 'flex', gap: 8 }}><Info size={20} /> 图片详情</h3>
+              <button onClick={onClose} style={{ background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer' }}><X size={22} /></button>
+            </div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 24 }}>
+              <div style={{ minWidth: 250, flex: 2 }}>
+                <img src={file.src} style={{ maxWidth: '100%', maxHeight: '70vh', borderRadius: 16, background: '#1e293b' }} />
+              </div>
+              <div style={{ flex: 1, minWidth: 220, color: '#cbd5e1' }}>
+                <div style={{ marginBottom: 20 }}><strong style={{ color: 'white' }}>{file.name}</strong></div>
+                <div style={{ display: 'grid', gap: 12 }}>
+                  <div><Calendar size={16} style={{ marginRight: 8 }} /> {new Date(file.updatedAt).toLocaleString()}</div>
+                  <div><Maximize2 size={16} style={{ marginRight: 8 }} /> {meta.width || '?'} × {meta.height || '?'} px</div>
+                  <div><HardDrive size={16} style={{ marginRight: 8 }} /> {formatBytes(meta.size)}</div>
+                  <div><FileImage size={16} style={{ marginRight: 8 }} /> {meta.type || 'image'}</div>
+                </div>
+                <div style={{ marginTop: 24 }}>
+                  <button onClick={() => { navigator.clipboard?.writeText(file.src); alert('地址已复制') }} style={{ ...primaryBtnStyle, background: '#334155' }}><Copy size={16} /> 复制地址</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )
+    }
+
+    /* ======================
+       🚀 主应用组件
+    ====================== */
+    function App() {
+      const { files, isLoading, currentPath, initialize } = useFileStore()
+      const setLoading = useFileStore(s => s.setLoading)
+      const setCurrentPath = useFileStore(s => s.setCurrentPath)
+      const addFiles = useFileStore(s => s.addFiles)
+      const removeFiles = useFileStore(s => s.removeFiles)
+      const renameFile = useFileStore(s => s.renameFile)
+      const moveItems = useFileStore(s => s.moveItems)
+      const copyItems = useFileStore(s => s.copyItems)
+
+      const [importModalOpen, setImportModalOpen] = React.useState(false)
+      const [detailFile, setDetailFile] = React.useState(null)
+      const [toast, setToast] = React.useState(null)
+
+      React.useEffect(() => {
+        if (files.length === 0) initialize()
+      }, [])
+
+      const showToast = (msg) => { setToast(msg); setTimeout(() => setToast(null), 2000) }
+
+      // 用 withLoading 包装异步操作
+      const withLoading = (fn) => async (...args) => {
+        setLoading(true)
+        try { await fn(...args) }
+        finally { setLoading(false) }
+      }
+
+      // FileManager 回调
+      const handleCreateFolder = withLoading((name, parentFolder) => {
+        const newFolder = {
+          name,
+          isDirectory: true,
+          path: parentFolder.path === "" ? `/${name}` : `${parentFolder.path}/${name}`,
+          updatedAt: new Date().toISOString(),
+        }
+        addFiles([newFolder])
+        showToast(`📁 已创建文件夹: ${name}`)
+      })
+
+      const handleDelete = withLoading((items) => {
+        const paths = items.map(i => i.path)
+        removeFiles(paths)
+        showToast(`🗑️ 已删除 ${items.length} 项`)
+      })
+
+      const handleRename = withLoading((file, newName) => {
+        renameFile(file.path, newName, file.isDirectory)
+        showToast(`✏️ 已重命名为 ${newName}`)
+      })
+
+      const handlePaste = withLoading((items, destFolder, operationType) => {
+        if (operationType === 'move') {
+          moveItems(items, destFolder)
+          showToast(`📦 已移动 ${items.length} 项`)
+        } else {
+          copyItems(items, destFolder)
+          showToast(`📋 已复制 ${items.length} 项`)
+        }
+      })
+
+      const handleFileUploaded = withLoading((response) => {
+        // 模拟上传成功添加文件
+        const newFile = {
+          name: `上传文件_${Date.now()}.png`,
+          isDirectory: false,
+          path: `/${currentPath || ''}上传文件_${Date.now()}.png`.replace(/\/+/g, '/'),
+          updatedAt: new Date().toISOString(),
+          size: 10240,
+          src: 'https://picsum.photos/200',
+          width: 200, height: 200,
+        }
+        addFiles([newFile])
+        showToast('⬆️ 文件上传成功')
+      })
+
+      const handleError = (error, file) => {
+        console.error('FileManager错误:', error, file)
+        showToast(`❌ ${error.message}`)
+      }
+
+      // 自定义文件预览：如果是图片且有src字段，则使用详情模态框
+      const customFilePreview = (file) => {
+        if (!file.isDirectory && (file.src || file.path.match(/\.(jpg|jpeg|png|gif|webp)$/i))) {
+          setDetailFile(file)
+          return null // 返回null阻止默认预览，我们用自定义模态框
+        }
+        return null // 其他类型使用默认预览
+      }
+
+      // 文件上传配置（模拟端点）
+      const fileUploadConfig = {
+        url: "https://jsonplaceholder.typicode.com/posts",
+        method: "POST",
+        headers: { "X-Demo": "file-manager" }
+      }
+
+      return (
+        <div className={containerClass}>
+          {toast && <div style={{ position: 'fixed', bottom: 30, left: '50%', transform: 'translateX(-50%)', background: '#1e293b', color: 'white', padding: '10px 24px', borderRadius: 40, boxShadow: '0 8px 20px black', zIndex: 2000, display: 'flex', gap: 8, border: '1px solid #3b82f6' }}><Check size={18} color="#4ade80" /> {toast}</div>}
+
+          {importModalOpen && <ImportModal onClose={() => setImportModalOpen(false)} currentFolderPath={currentPath} />}
+          {detailFile && <DetailModal file={detailFile} onClose={() => setDetailFile(null)} />}
+
+          <div className={headerClass}>
+            <div className={titleClass}>
+              <FolderOpen size={34} strokeWidth={1.8} color="#a5c9ff" />
+              <span>临时图片文件夹</span>
+              <span className={badgeClass}>{files.length} 个项目</span>
+            </div>
+            <div style={{ display: 'flex', gap: 12 }}>
+              <button className={iconButton({})} onClick={() => setImportModalOpen(true)}>
+                <Plus size={18} /> 导入图片
+              </button>
+              <button className={clearButton({})} onClick={() => { removeFiles(files.map(f => f.path)); showToast('已清空所有文件') }}>
+                <Trash2 size={16} /> 清空全部
+              </button>
+            </div>
+          </div>
+
+          {/* FileManager 容器 */}
+          <div className={fmOverride}>
+            <FileManager
+              files={files}
+              initialPath=""
+              height={700}
+              layout="grid"
+              language="zh-CN"
+              primaryColor="#3b82f6"
+              isLoading={isLoading}
+              enableFilePreview={true}
+              filePreviewComponent={customFilePreview}
+              collapsibleNav={true}
+              defaultNavExpanded={true}
+              permissions={{
+                create: true, upload: true, move: true, copy: true,
+                rename: true, download: true, delete: true,
+              }}
+              fileUploadConfig={fileUploadConfig}
+              maxFileSize={20 * 1024 * 1024}
+              acceptedFileTypes=".jpg,.jpeg,.png,.gif,.webp,.txt,.pdf"
+              onCreateFolder={handleCreateFolder}
+              onDelete={handleDelete}
+              onRename={handleRename}
+              onPaste={handlePaste}
+              onFileUploaded={handleFileUploaded}
+              onFileUploading={(file, parent) => { console.log('上传中:', file.name); return {} }}
+              onError={handleError}
+              onFolderChange={(path) => setCurrentPath(path)}
+              onRefresh={() => showToast('🔄 刷新')}
+              onDownload={(files) => showToast(`⬇️ 下载 ${files.length} 项`)}
+              onCopy={(files) => showToast(`📋 已复制 ${files.length} 项`)}
+              onCut={(files) => showToast(`✂️ 已剪切 ${files.length} 项`)}
+              onSelectionChange={(sel) => console.log('选中:', sel.length)}
+              onSortChange={(sort) => console.log('排序:', sort)}
+              onLayoutChange={(layout) => console.log('布局:', layout)}
+            />
+          </div>
+
+          <div style={{ marginTop: 16, color: '#8295b3', fontSize: 13, textAlign: 'center' }}>
+            ⌨️ 快捷键 · 拖拽添加 · 右键菜单 · 深色主题 · Zustand 驱动
+          </div>
+        </div>
+      )
+    }
+
+    createRoot(document.getElementById("root")).render(<App />)
+  </script>
+</body>
+
+</html>

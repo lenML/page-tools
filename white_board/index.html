@@ -1,0 +1,978 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+  <script type="importmap">
+        {
+            "imports": {
+                "react": "https://esm.sh/react@19.2.4",
+                "react/jsx-runtime": "https://esm.sh/react@19.2.4/jsx-runtime",
+                "react-dom/client": "https://esm.sh/react-dom@19.2.4/client",
+                "lucide-react": "https://esm.sh/lucide-react?external=react",
+                "zustand": "https://esm.sh/zustand?external=react",
+                "marked": "https://esm.sh/marked@14",
+                "@radix-ui/react-tooltip": "https://esm.sh/@radix-ui/react-tooltip@1?external=react",
+                "@radix-ui/react-dialog": "https://esm.sh/@radix-ui/react-dialog@1?external=react",
+                "@radix-ui/react-popover": "https://esm.sh/@radix-ui/react-popover@1?external=react",
+                "@radix-ui/react-toggle-group": "https://esm.sh/@radix-ui/react-toggle-group@1?external=react",
+                "@radix-ui/react-scroll-area": "https://esm.sh/@radix-ui/react-scroll-area@1?external=react",
+                "@radix-ui/react-visually-hidden": "https://esm.sh/@radix-ui/react-visually-hidden@1?external=react"
+            }
+        }
+    </script>
+  <script src="https://cdn.jsdelivr.net/npm/@babel/standalone@latest/babel.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+  <style>
+    :root {
+      --bg: #1e1e1e;
+      --panel: #252526;
+      --input: #3c3c3c;
+      --border: #3e3e3e;
+      --text: #cccccc;
+      --text2: #858585;
+      --blue: #007acc;
+      --gold: #d4a72c;
+      --pink: #f472b6;
+      --red: #e06c75;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      padding: 0;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+      font-size: 13px;
+      background: var(--bg);
+      color: var(--text);
+      overflow: hidden;
+      width: 100vw;
+      height: 100vh;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    .dot-bg {
+      background-color: #1a1a24;
+      background-image: radial-gradient(circle, rgba(255, 255, 255, 0.08) 1px, transparent 1px);
+    }
+
+    ::-webkit-scrollbar {
+      width: 5px;
+      height: 5px;
+    }
+
+    ::-webkit-scrollbar-track {
+      background: transparent;
+    }
+
+    ::-webkit-scrollbar-thumb {
+      background: rgba(255, 255, 255, 0.12);
+      border-radius: 3px;
+    }
+
+    ::-webkit-scrollbar-thumb:hover {
+      background: rgba(255, 255, 255, 0.2);
+    }
+
+    .node-selected {
+      outline: 2px solid #007acc;
+      outline-offset: 1px;
+      border-radius: 3px;
+    }
+
+    .text-node-editing {
+      outline: 2px dashed #d4a72c;
+      outline-offset: 1px;
+      border-radius: 3px;
+      cursor: text;
+    }
+
+    .group-node {
+      border: 2px dashed rgba(255, 255, 255, 0.25);
+      background: rgba(255, 255, 255, 0.03);
+      border-radius: 6px;
+    }
+
+    .group-node.node-selected {
+      border-color: rgba(0, 122, 204, 0.6);
+      background: rgba(0, 122, 204, 0.06);
+    }
+
+    .minimap-dot {
+      position: absolute;
+      border-radius: 2px;
+      background: rgba(148, 163, 184, 0.6);
+      pointer-events: none;
+    }
+
+    .minimap-pin {
+      position: absolute;
+      width: 4px;
+      height: 4px;
+      border-radius: 50%;
+      background: #d4a72c;
+      pointer-events: none;
+      transform: translate(-50%, -50%);
+    }
+
+    .markdown-rendered h1 {
+      font-size: 1.3em;
+      font-weight: 700;
+      margin: 0 0 4px;
+      color: #e0e0e0;
+    }
+
+    .markdown-rendered h2 {
+      font-size: 1.15em;
+      font-weight: 700;
+      margin: 0 0 3px;
+      color: #d0d0d0;
+    }
+
+    .markdown-rendered h3 {
+      font-size: 1.05em;
+      font-weight: 600;
+      margin: 0 0 2px;
+      color: #c0c0c0;
+    }
+
+    .markdown-rendered strong {
+      font-weight: 700;
+      color: #e8e8e8;
+    }
+
+    .markdown-rendered em {
+      font-style: italic;
+    }
+
+    .markdown-rendered code {
+      background: rgba(255, 255, 255, 0.1);
+      padding: 1px 4px;
+      border-radius: 3px;
+      font-family: monospace;
+      font-size: 0.9em;
+    }
+
+    .markdown-rendered pre {
+      background: rgba(0, 0, 0, 0.3);
+      padding: 6px 8px;
+      border-radius: 4px;
+      overflow-x: auto;
+      margin: 3px 0;
+      font-family: monospace;
+      font-size: 0.85em;
+    }
+
+    .markdown-rendered pre code {
+      background: none;
+      padding: 0;
+    }
+
+    .markdown-rendered ul {
+      margin: 2px 0;
+      padding-left: 16px;
+    }
+
+    .markdown-rendered li {
+      list-style: disc;
+    }
+
+    .toggle-group-item[data-state="on"] {
+      background: #007acc;
+      color: #fff;
+    }
+
+    .toggle-group-item[data-state="off"] {
+      color: #858585;
+      background: transparent;
+    }
+
+    .toggle-group-item[data-state="off"]:hover {
+      background: #3c3c3c;
+    }
+
+    .resize-handle {
+      position: absolute;
+      width: 10px;
+      height: 10px;
+      background: #007acc;
+      border: 1px solid white;
+      border-radius: 1px;
+      z-index: 20;
+      pointer-events: auto;
+    }
+  </style>
+</head>
+
+<body>
+  <div id="root"></div>
+
+  <script type="text/babel" data-type="module">
+    import * as React from "react";
+    window.React = React;
+  </script>
+
+  <script type="text/babel" data-type="module">
+    import { createRoot } from "react-dom/client";
+    import {
+      Plus, MousePointer2, Square, Minus as LineIcon, ArrowRight, MapPin,
+      Trash2, Undo2, Redo2, Download, Upload, Map as MapIcon, X, ChevronLeft, Pin
+    } from "lucide-react";
+    import { create } from "zustand";
+    import { marked } from "marked";
+    import * as Tooltip from "@radix-ui/react-tooltip";
+    import * as Dialog from "@radix-ui/react-dialog";
+    import * as Popover from "@radix-ui/react-popover";
+    import * as ToggleGroup from "@radix-ui/react-toggle-group";
+    import * as ScrollArea from "@radix-ui/react-scroll-area";
+    import * as VisuallyHidden from "@radix-ui/react-visually-hidden";
+
+    marked.use({ breaks: true, gfm: true });
+    const renderMarkdownSafe = (text) => text ? marked.parse(text) : '';
+
+    // ========== IndexedDB 图片存储 ==========
+    const IMAGE_DB_NAME = 'WhiteboardImages', IMAGE_STORE_NAME = 'images';
+    let dbPromise = null;
+    function openImageDB() {
+      if (dbPromise) return dbPromise;
+      dbPromise = new Promise((resolve, reject) => {
+        const req = indexedDB.open(IMAGE_DB_NAME, 1);
+        req.onupgradeneeded = (e) => { const db = e.target.result; if (!db.objectStoreNames.contains(IMAGE_STORE_NAME)) db.createObjectStore(IMAGE_STORE_NAME, { keyPath: 'id' }); };
+        req.onsuccess = (e) => resolve(e.target.result);
+        req.onerror = (e) => reject(e.target.error);
+      });
+      return dbPromise;
+    }
+    async function saveImageToDB(id, blob) { const db = await openImageDB(); return new Promise((res, rej) => { const tx = db.transaction(IMAGE_STORE_NAME, 'readwrite'); const store = tx.objectStore(IMAGE_STORE_NAME); store.put({ id, blob }); tx.oncomplete = res; tx.onerror = rej; }); }
+    async function getImageFromDB(id) { const db = await openImageDB(); return new Promise((res, rej) => { const tx = db.transaction(IMAGE_STORE_NAME, 'readonly'); const req = tx.objectStore(IMAGE_STORE_NAME).get(id); req.onsuccess = () => res(req.result?.blob ?? null); req.onerror = rej; }); }
+    async function deleteImageFromDB(id) { const db = await openImageDB(); return new Promise((res, rej) => { const tx = db.transaction(IMAGE_STORE_NAME, 'readwrite'); tx.objectStore(IMAGE_STORE_NAME).delete(id); tx.oncomplete = res; tx.onerror = rej; }); }
+    function compressImageToWebP(blob) {
+      return new Promise((res, rej) => {
+        const img = new Image();
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          let w = img.width, h = img.height;
+          if (w > 800) { h = (h / w) * 800; w = 800; }
+          canvas.width = w; canvas.height = h;
+          canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+          canvas.toBlob((b) => b ? res(b) : rej(new Error('压缩失败')), 'image/webp', 0.5);
+        };
+        img.onerror = rej;
+        img.src = URL.createObjectURL(blob);
+      });
+    }
+    async function blobToBase64(blob) { return new Promise((res, rej) => { const r = new FileReader(); r.onloadend = () => res(r.result); r.onerror = rej; r.readAsDataURL(blob); }); }
+    function base64ToBlob(base64, mime = 'image/webp') { const bs = atob(base64.split(',')[1]); const ab = new ArrayBuffer(bs.length); const ia = new Uint8Array(ab); for (let i = 0; i < bs.length; i++) ia[i] = bs.charCodeAt(i); return new Blob([ab], { type: mime }); }
+
+    const genId = () => `n_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    const deepClone = (obj) => JSON.parse(JSON.stringify(obj));
+    const getBoardIdFromHash = () => new URLSearchParams(window.location.hash.slice(1)).get('id') || null;
+    const setBoardIdToHash = (id) => { window.location.hash = `id=${encodeURIComponent(id)}`; };
+    const clearHash = () => { window.location.hash = ''; };
+
+    // ========== Zustand Store ==========
+    const useStore = create((set, get) => {
+      const loadBoards = () => { try { return JSON.parse(localStorage.getItem('wb_boards_v6')) || {}; } catch { return {}; } };
+      const saved = loadBoards();
+      const hashId = getBoardIdFromHash();
+      const initialBoardId = hashId && saved[hashId] ? hashId : null;
+      const initialView = initialBoardId ? 'canvas' : 'board-list';
+      let saveTimer;
+      const scheduleSave = () => { clearTimeout(saveTimer); saveTimer = setTimeout(() => { const { boards } = get(); const s = {}; for (const [id, b] of Object.entries(boards)) s[id] = { nodes: b.nodes, pins: b.pins, viewport: b.viewport, name: b.name, history: b.history }; try { localStorage.setItem('wb_boards_v6', JSON.stringify(s)); } catch { } }, 300); };
+      const saveHistory = () => { const { boards, currentBoardId } = get(); const board = boards[currentBoardId]; if (!board) return; const snap = { nodes: deepClone(board.nodes), pins: deepClone(board.pins) }; set({ boards: { ...boards, [currentBoardId]: { ...board, history: { past: [...board.history.past.slice(-100), snap], future: [] } } } }); scheduleSave(); };
+
+      return {
+        view: initialView,
+        currentBoardId: initialBoardId || 'default',
+        boards: saved,
+        selectedNodeId: null,
+        tool: 'select',
+        clipboard: null,
+        dragging: null,
+        showMinimap: true,
+        pinPanelOpen: false,
+        editingNodeId: null,
+        shapePreview: null,
+        deleteDialogTarget: null,
+        resizing: null,
+
+        setView: (v) => set({ view: v }),
+        setCurrentBoardId: (id) => {
+          const { boards } = get();
+          if (!boards[id]) {
+            set(s => ({ boards: { ...s.boards, [id]: { nodes: [], pins: [], viewport: { x: 0, y: 0, zoom: 1 }, history: { past: [], future: [] }, name: id } }, currentBoardId: id, selectedNodeId: null, tool: 'select', view: 'canvas' }));
+          } else {
+            set({ currentBoardId: id, selectedNodeId: null, tool: 'select', view: 'canvas' });
+          }
+          setBoardIdToHash(id);
+          scheduleSave();
+        },
+        createBoard: (name) => {
+          const id = name || `画布_${Date.now()}`;
+          const { boards } = get();
+          const finalId = boards[id] ? `${id}_${Date.now()}` : id;
+          set(s => ({ boards: { ...s.boards, [finalId]: { nodes: [], pins: [], viewport: { x: 0, y: 0, zoom: 1 }, history: { past: [], future: [] }, name: finalId } }, currentBoardId: finalId, selectedNodeId: null, tool: 'select', view: 'canvas' }));
+          setBoardIdToHash(finalId);
+          scheduleSave();
+        },
+        deleteBoard: (id) => {
+          const { boards, currentBoardId } = get();
+          const keys = Object.keys(boards);
+          if (keys.length <= 1) return;
+          const newBoards = { ...boards }; delete newBoards[id];
+          const newId = id === currentBoardId ? (keys.find(k => k !== id) || 'default') : currentBoardId;
+          set({ boards: newBoards, currentBoardId: newId, selectedNodeId: null, deleteDialogTarget: null });
+          if (id === currentBoardId) setBoardIdToHash(newId);
+          scheduleSave();
+        },
+        setDeleteDialogTarget: (id) => set({ deleteDialogTarget: id }),
+        clearDeleteDialogTarget: () => set({ deleteDialogTarget: null }),
+        goBackToList: () => { clearHash(); set({ view: 'board-list', selectedNodeId: null, tool: 'select', editingNodeId: null }); },
+        setTool: (tool) => set({ tool, selectedNodeId: tool !== 'select' ? null : get().selectedNodeId }),
+        selectNode: (id) => { if (get().tool === 'select') set({ selectedNodeId: id, editingNodeId: null }); },
+        deselectAll: () => set({ selectedNodeId: null, editingNodeId: null }),
+        startEditingNode: (id) => set({ editingNodeId: id }),
+        stopEditingNode: () => {
+          const { editingNodeId, boards, currentBoardId } = get();
+          if (!editingNodeId) return;
+          const board = boards[currentBoardId];
+          if (board) {
+            const snap = { nodes: deepClone(board.nodes), pins: deepClone(board.pins) };
+            set({ editingNodeId: null, boards: { ...boards, [currentBoardId]: { ...board, history: { ...board.history, past: [...board.history.past.slice(-100), snap], future: [] } } } });
+            scheduleSave();
+          } else set({ editingNodeId: null });
+        },
+        setViewport: (vp) => { const { boards, currentBoardId } = get(); const board = boards[currentBoardId]; if (board) set({ boards: { ...boards, [currentBoardId]: { ...board, viewport: { ...board.viewport, ...vp } } } }); },
+        zoomAt: (sx, sy, delta) => {
+          const { boards, currentBoardId } = get(); const board = boards[currentBoardId]; if (!board) return;
+          const vp = board.viewport; const factor = delta > 0 ? 1.1 : 1 / 1.1; const nz = Math.max(0.06, Math.min(8, vp.zoom * factor));
+          const wx = (sx - vp.x) / vp.zoom, wy = (sy - vp.y) / vp.zoom;
+          set({ boards: { ...boards, [currentBoardId]: { ...board, viewport: { x: sx - wx * nz, y: sy - wy * nz, zoom: nz } } } });
+        },
+        addNode: (node) => { saveHistory(); const { boards, currentBoardId } = get(); const board = boards[currentBoardId]; if (board) { set({ boards: { ...boards, [currentBoardId]: { ...board, nodes: [...board.nodes, node] } }, selectedNodeId: node.id }); scheduleSave(); } },
+        updateNode: (id, updates) => { const { boards, currentBoardId } = get(); const board = boards[currentBoardId]; if (board) { set({ boards: { ...boards, [currentBoardId]: { ...board, nodes: board.nodes.map(n => n.id === id ? { ...n, ...updates } : n) } } }); scheduleSave(); } },
+        deleteNode: (id) => { saveHistory(); const { boards, currentBoardId } = get(); const board = boards[currentBoardId]; if (!board) return; const node = board.nodes.find(n => n.id === id); if (node?.type === 'image' && node.imageId) deleteImageFromDB(node.imageId).catch(console.error); set({ boards: { ...boards, [currentBoardId]: { ...board, nodes: board.nodes.filter(n => n.id !== id) } }, selectedNodeId: null }); scheduleSave(); },
+        updateNodesBatch: (map) => { const { boards, currentBoardId } = get(); const board = boards[currentBoardId]; if (board) { set({ boards: { ...boards, [currentBoardId]: { ...board, nodes: board.nodes.map(n => map.has(n.id) ? { ...n, ...map.get(n.id) } : n) } } }); scheduleSave(); } },
+        addPin: (pin) => { saveHistory(); const { boards, currentBoardId } = get(); const board = boards[currentBoardId]; if (board) { set({ boards: { ...boards, [currentBoardId]: { ...board, pins: [...board.pins, pin] } } }); scheduleSave(); } },
+        updatePin: (id, updates) => { const { boards, currentBoardId } = get(); const board = boards[currentBoardId]; if (board) { set({ boards: { ...boards, [currentBoardId]: { ...board, pins: board.pins.map(p => p.id === id ? { ...p, ...updates } : p) } } }); scheduleSave(); } },
+        deletePin: (id) => { saveHistory(); const { boards, currentBoardId } = get(); const board = boards[currentBoardId]; if (board) { set({ boards: { ...boards, [currentBoardId]: { ...board, pins: board.pins.filter(p => p.id !== id) } } }); scheduleSave(); } },
+        goToPin: (id) => { const { boards, currentBoardId } = get(); const board = boards[currentBoardId]; if (!board) return; const pin = board.pins.find(p => p.id === id); if (!pin) return; const vp = board.viewport; const sw = window.innerWidth, sh = window.innerHeight; set({ boards: { ...boards, [currentBoardId]: { ...board, viewport: { ...vp, x: sw / 2 - pin.x * vp.zoom, y: sh / 2 - pin.y * vp.zoom } } }, pinPanelOpen: false }); },
+        setPinPanelOpen: (v) => set({ pinPanelOpen: v }),
+        undo: () => { const { boards, currentBoardId } = get(); const board = boards[currentBoardId]; if (!board || !board.history.past.length) return; const past = [...board.history.past]; const snap = past.pop(); const futureSnap = { nodes: deepClone(board.nodes), pins: deepClone(board.pins) }; set({ boards: { ...boards, [currentBoardId]: { ...board, nodes: snap.nodes, pins: snap.pins, history: { past, future: [futureSnap, ...board.history.future.slice(0, 100)] } } }, selectedNodeId: null }); scheduleSave(); },
+        redo: () => { const { boards, currentBoardId } = get(); const board = boards[currentBoardId]; if (!board || !board.history.future.length) return; const future = [...board.history.future]; const snap = future.shift(); const pastSnap = { nodes: deepClone(board.nodes), pins: deepClone(board.pins) }; set({ boards: { ...boards, [currentBoardId]: { ...board, nodes: snap.nodes, pins: snap.pins, history: { past: [...board.history.past.slice(-100), pastSnap], future } } }, selectedNodeId: null }); scheduleSave(); },
+        exportBoard: async () => { const { boards, currentBoardId } = get(); const board = boards[currentBoardId]; if (!board) return; const nodes = await Promise.all(board.nodes.map(async n => { if (n.type === 'image' && n.imageId) { const blob = await getImageFromDB(n.imageId); if (blob) { const b64 = await blobToBase64(blob); return { ...n, src: b64 }; } } return n; })); const data = { nodes, pins: board.pins, viewport: board.viewport, name: board.name, version: '3.0' }; const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' }); const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `whiteboard_${board.name || currentBoardId}.json`; a.click(); URL.revokeObjectURL(a.href); },
+        importBoard: async (json) => { try { const data = typeof json === 'string' ? JSON.parse(json) : json; if (!data.nodes?.length) throw new Error('无效'); saveHistory(); const { boards, currentBoardId } = get(); const board = boards[currentBoardId]; if (!board) return false; const nodes = await Promise.all(data.nodes.map(async n => { if (n.type === 'image' && n.src?.startsWith('data:')) { const blob = base64ToBlob(n.src); const cb = await compressImageToWebP(blob); const imgId = n.imageId || genId(); await saveImageToDB(imgId, cb); return { ...n, src: URL.createObjectURL(cb), imageId: imgId }; } return n; })); set({ boards: { ...boards, [currentBoardId]: { ...board, nodes, pins: data.pins || [], viewport: data.viewport || { x: 0, y: 0, zoom: 1 }, history: { past: [], future: [] } } }, selectedNodeId: null }); scheduleSave(); return true; } catch (e) { console.error(e); return false; } },
+        copySelectedNode: () => { const { selectedNodeId, boards, currentBoardId } = get(); if (!selectedNodeId) return; const node = boards[currentBoardId]?.nodes.find(n => n.id === selectedNodeId); if (node) set({ clipboard: deepClone(node) }); },
+        pasteNode: (wx, wy) => { const { clipboard } = get(); if (!clipboard) return; const newNode = { ...deepClone(clipboard), id: genId(), x: wx - (clipboard.width || 100) / 2, y: wy - (clipboard.height || 30) / 2 }; if (newNode.type === 'line' || newNode.type === 'arrow') { const dx = newNode.x - clipboard.x, dy = newNode.y - clipboard.y; newNode.x2 = (clipboard.x2 ?? clipboard.x + (clipboard.width || 0)) + dx; newNode.y2 = (clipboard.y2 ?? clipboard.y + (clipboard.height || 0)) + dy; } get().addNode(newNode); },
+        startDrag: (type, data) => set({ dragging: { type, ...data } }),
+        updateDrag: (upd) => set(s => s.dragging ? { dragging: { ...s.dragging, ...upd } } : {}),
+        endDrag: () => {
+          const { dragging, boards, currentBoardId } = get();
+          if (!dragging) return;
+          if (dragging.type === 'node' && dragging.nodeId && dragging.didMove) {
+            const board = boards[currentBoardId];
+            if (board) {
+              const snap = { nodes: deepClone(board.nodes), pins: deepClone(board.pins) };
+              set({ dragging: null, boards: { ...boards, [currentBoardId]: { ...board, history: { ...board.history, past: [...board.history.past.slice(-100), snap], future: [] } } } });
+              scheduleSave();
+              return;
+            }
+          }
+          if (dragging.type === 'pin' && dragging.pinId && dragging.didMove) {
+            const board = boards[currentBoardId];
+            if (board) {
+              const snap = { nodes: deepClone(board.nodes), pins: deepClone(board.pins) };
+              set({ dragging: null, boards: { ...boards, [currentBoardId]: { ...board, history: { ...board.history, past: [...board.history.past.slice(-100), snap], future: [] } } } });
+              scheduleSave();
+              return;
+            }
+          }
+          if (dragging.type === 'shape' && dragging.endWorldX !== undefined) {
+            const { shapeType, startWorldX, startWorldY, endWorldX, endWorldY } = dragging;
+            const node = { id: genId(), type: shapeType, x: startWorldX, y: startWorldY, x2: endWorldX, y2: endWorldY, width: Math.abs(endWorldX - startWorldX), height: Math.abs(endWorldY - startWorldY), color: shapeType === 'rectangle' ? 'rgba(255,255,255,0.25)' : '#f472b6' };
+            if (shapeType === 'rectangle') { node.x = Math.min(startWorldX, endWorldX); node.y = Math.min(startWorldY, endWorldY); }
+            set({ dragging: null, shapePreview: null });
+            get().addNode(node);
+            return;
+          }
+          set({ dragging: null, shapePreview: null });
+        },
+        setShapePreview: (p) => set({ shapePreview: p }),
+        setShowMinimap: (v) => set({ showMinimap: v }),
+        startResizing: (nodeId, handle, startPos, nodePos, nodeDim) => set({
+          resizing: { nodeId, handle, startMouseX: startPos.x, startMouseY: startPos.y, startX: nodePos.x, startY: nodePos.y, startWidth: nodeDim.width, startHeight: nodeDim.height, aspectRatio: nodeDim.aspectRatio }
+        }),
+        updateResizing: (mouseX, mouseY, maintainRatio) => {
+          const { resizing, boards, currentBoardId } = get();
+          if (!resizing) return;
+          const board = boards[currentBoardId];
+          if (!board) return;
+          const vpZoom = board.viewport.zoom || 1;
+          const { nodeId, handle, startMouseX, startMouseY, startX, startY, startWidth, startHeight, aspectRatio } = resizing;
+          const dx = (mouseX - startMouseX) / vpZoom;
+          const dy = (mouseY - startMouseY) / vpZoom;
+          let newX = startX, newY = startY, newW = startWidth, newH = startHeight;
+          const effectiveRatio = maintainRatio && aspectRatio ? aspectRatio : null;
+
+          const applyRatio = (tw, th) => {
+            if (!effectiveRatio) return { w: tw, h: th };
+            if (tw / th > effectiveRatio) return { w: th * effectiveRatio, h: th };
+            else return { w: tw, h: tw / effectiveRatio };
+          };
+
+          switch (handle) {
+            case 'nw': { const d = applyRatio(startWidth - dx, startHeight - dy); newW = Math.max(10, d.w); newH = Math.max(10, d.h); newX = startX + startWidth - newW; newY = startY + startHeight - newH; break; }
+            case 'ne': { const d = applyRatio(startWidth + dx, startHeight - dy); newW = Math.max(10, d.w); newH = Math.max(10, d.h); newY = startY + startHeight - newH; break; }
+            case 'sw': { const d = applyRatio(startWidth - dx, startHeight + dy); newW = Math.max(10, d.w); newH = Math.max(10, d.h); newX = startX + startWidth - newW; break; }
+            case 'se': { const d = applyRatio(startWidth + dx, startHeight + dy); newW = Math.max(10, d.w); newH = Math.max(10, d.h); break; }
+            case 'n': { const d = effectiveRatio ? { w: startHeight - dy * effectiveRatio, h: startHeight - dy } : { w: startWidth, h: startHeight - dy }; newH = Math.max(10, d.h); newW = effectiveRatio ? Math.max(10, d.w) : startWidth; if (effectiveRatio) newX = startX + (startWidth - newW) / 2; newY = startY + startHeight - newH; break; }
+            case 's': { const d = effectiveRatio ? { w: startHeight + dy * effectiveRatio, h: startHeight + dy } : { w: startWidth, h: startHeight + dy }; newH = Math.max(10, d.h); newW = effectiveRatio ? Math.max(10, d.w) : startWidth; if (effectiveRatio) newX = startX + (startWidth - newW) / 2; break; }
+            case 'w': { const d = effectiveRatio ? { w: startWidth - dx, h: (startWidth - dx) / effectiveRatio } : { w: startWidth - dx, h: startHeight }; newW = Math.max(10, d.w); newH = effectiveRatio ? Math.max(10, d.h) : startHeight; if (effectiveRatio) newY = startY + (startHeight - newH) / 2; newX = startX + startWidth - newW; break; }
+            case 'e': { const d = effectiveRatio ? { w: startWidth + dx, h: (startWidth + dx) / effectiveRatio } : { w: startWidth + dx, h: startHeight }; newW = Math.max(10, d.w); newH = effectiveRatio ? Math.max(10, d.h) : startHeight; if (effectiveRatio) newY = startY + (startHeight - newH) / 2; break; }
+          }
+          const nodes = board.nodes.map(n => n.id === nodeId ? { ...n, x: newX, y: newY, width: newW, height: newH } : n);
+          set({ boards: { ...boards, [currentBoardId]: { ...board, nodes } } });
+        },
+        endResizing: () => {
+          const { resizing, boards, currentBoardId } = get();
+          if (!resizing) return;
+          const board = boards[currentBoardId];
+          if (board) {
+            const snap = { nodes: deepClone(board.nodes), pins: deepClone(board.pins) };
+            set({ resizing: null, boards: { ...boards, [currentBoardId]: { ...board, history: { ...board.history, past: [...board.history.past.slice(-100), snap], future: [] } } } });
+            scheduleSave();
+          } else set({ resizing: null });
+        },
+      };
+    });
+
+    function useImageLoader() {
+      const updateNode = useStore(s => s.updateNode);
+      React.useEffect(() => {
+        let cancelled = false;
+        (async () => {
+          const boards = useStore.getState().boards;
+          for (const [, board] of Object.entries(boards)) {
+            for (const node of board.nodes) {
+              if (cancelled) return;
+              if (node.type === 'image' && node.imageId && (!node.src || node.src === '' || node.src === 'undefined')) {
+                try { const blob = await getImageFromDB(node.imageId); if (blob && !cancelled) updateNode(node.id, { src: URL.createObjectURL(blob) }); } catch { }
+              }
+            }
+          }
+        })();
+        return () => { cancelled = true; };
+      }, []);
+    }
+
+    function ToolbarButton({ children, onClick, disabled, title, active, activeColor }) {
+      return (
+        <Tooltip.Root delayDuration={400}>
+          <Tooltip.Trigger asChild>
+            <button onClick={onClick} disabled={disabled} className="p-1.5 rounded transition-all flex items-center justify-center" style={{ color: disabled ? '#4a4a4a' : active ? (activeColor || '#007acc') : '#858585', background: active ? '#007acc' : 'transparent', cursor: disabled ? 'not-allowed' : 'pointer' }} onMouseEnter={e => { if (!active && !disabled) e.currentTarget.style.background = '#3c3c3c'; }} onMouseLeave={e => { if (!active && !disabled) e.currentTarget.style.background = 'transparent'; }}>
+              {children}
+            </button>
+          </Tooltip.Trigger>
+          {title && <Tooltip.Portal><Tooltip.Content className="px-2 py-1 text-xs rounded shadow border" style={{ background: '#333', color: '#ddd', borderColor: '#555' }} sideOffset={6}>{title}<Tooltip.Arrow style={{ fill: '#333' }} /></Tooltip.Content></Tooltip.Portal>}
+        </Tooltip.Root>
+      );
+    }
+
+    function ResizeHandles({ nodeId }) {
+      const startResizing = useStore(s => s.startResizing);
+      const nodes = useStore(s => s.boards[s.currentBoardId]?.nodes || []);
+      const node = nodes.find(n => n.id === nodeId);
+      if (!node || node.type === 'line' || node.type === 'arrow') return null;
+      const handles = ['nw', 'n', 'ne', 'e', 'se', 's', 'sw', 'w'];
+      const getStyle = (h) => {
+        const base = { position: 'absolute', width: 10, height: 10, background: '#007acc', border: '1px solid white', borderRadius: 1, zIndex: 20 };
+        switch (h) {
+          case 'nw': return { ...base, top: -5, left: -5, cursor: 'nwse-resize' };
+          case 'n': return { ...base, top: -5, left: '50%', marginLeft: -5, cursor: 'ns-resize' };
+          case 'ne': return { ...base, top: -5, right: -5, cursor: 'nesw-resize' };
+          case 'e': return { ...base, top: '50%', marginTop: -5, right: -5, cursor: 'ew-resize' };
+          case 'se': return { ...base, bottom: -5, right: -5, cursor: 'nwse-resize' };
+          case 's': return { ...base, bottom: -5, left: '50%', marginLeft: -5, cursor: 'ns-resize' };
+          case 'sw': return { ...base, bottom: -5, left: -5, cursor: 'nesw-resize' };
+          case 'w': return { ...base, top: '50%', marginTop: -5, left: -5, cursor: 'ew-resize' };
+        }
+      };
+      return handles.map(h => (
+        <div key={h} className="resize-handle" style={getStyle(h)} onMouseDown={e => {
+          e.stopPropagation(); e.preventDefault();
+          const n = nodes.find(n => n.id === nodeId);
+          if (n) {
+            const ratio = n.type === 'image' ? (n.width / n.height) : undefined;
+            startResizing(nodeId, h, { x: e.clientX, y: e.clientY }, { x: n.x, y: n.y }, { width: n.width, height: n.height, aspectRatio: ratio });
+          }
+        }} />
+      ));
+    }
+
+    function TextNode({ node, isSelected, isEditing, onNodeMouseDown, onNodeDoubleClick }) {
+      const updateNode = useStore(s => s.updateNode);
+      const stopEditingNode = useStore(s => s.stopEditingNode);
+      const ref = React.useRef(null);
+      React.useEffect(() => { if (isEditing && ref.current) { const el = ref.current; setTimeout(() => { el.focus(); const sel = window.getSelection(); const r = document.createRange(); r.selectNodeContents(el); r.collapse(false); sel.removeAllRanges(); sel.addRange(r); }, 10); } }, [isEditing]);
+      const base = { position: 'absolute', left: 0, top: 0, minWidth: 50, cursor: isSelected && !isEditing ? 'move' : isEditing ? 'text' : 'pointer', userSelect: 'none' };
+      if (isEditing) return <div ref={ref} contentEditable suppressContentEditableWarning className="px-2.5 py-2 text-sm rounded-md min-w-[60px] outline-none text-node-editing" style={{ ...base, width: node.width || 220, background: 'rgba(30,30,35,0.92)', border: '1px solid rgba(255,255,255,0.1)', color: '#d0d0d0', whiteSpace: 'pre-wrap', wordBreak: 'break-word', fontSize: 13, lineHeight: 1.5 }} onMouseDown={e => e.stopPropagation()} onBlur={() => { const c = ref.current?.innerText || ''; updateNode(node.id, { content: c || '双击编辑' }); stopEditingNode(); }}>{node.content || ''}</div>;
+      return <div className={`px-2.5 py-2 text-sm rounded-md min-w-[60px] markdown-rendered ${isSelected ? 'node-selected' : ''}`} style={{ ...base, width: node.width || 220, background: 'rgba(30,30,35,0.85)', border: '1px solid rgba(255,255,255,0.07)', color: '#d0d0d0', fontSize: 13, lineHeight: 1.5 }} onMouseDown={e => onNodeMouseDown(node.id, e)} onDoubleClick={e => { e.stopPropagation(); onNodeDoubleClick(node.id); }} dangerouslySetInnerHTML={{ __html: renderMarkdownSafe(node.content || '双击编辑') }} />;
+    }
+
+    function ImageNode({ node, isSelected, onNodeMouseDown }) {
+      return <div className={`${isSelected ? 'node-selected' : ''} rounded-lg overflow-hidden`} style={{ position: 'absolute', left: 0, top: 0, width: node.width || 200, height: node.height || 150, background: '#1e1e1e', cursor: isSelected ? 'move' : 'pointer', userSelect: 'none' }} onMouseDown={e => onNodeMouseDown(node.id, e)}><img src={node.src} alt="" className="w-full h-full object-contain" draggable={false} style={{ pointerEvents: 'none' }} /></div>;
+    }
+
+    function IframeNode({ node, isSelected, onNodeMouseDown, onNodeDoubleClick }) {
+      return <div className={`${isSelected ? 'node-selected' : ''} rounded-lg overflow-hidden border`} style={{ position: 'absolute', left: 0, top: 0, width: node.width || 400, height: node.height || 280, minWidth: 180, minHeight: 120, borderColor: '#3e3e3e', background: '#1e1e1e', cursor: isSelected ? 'move' : 'pointer', userSelect: 'none' }} onMouseDown={e => onNodeMouseDown(node.id, e)} onDoubleClick={e => { e.stopPropagation(); onNodeDoubleClick(node.id); }}>
+        <div className="absolute top-0 left-0 right-0 px-2 py-1 text-xs truncate z-10 pointer-events-none" style={{ background: 'rgba(30,30,35,0.9)', color: '#858585' }}>🌐 {node.url || '双击设置URL'}</div>
+        {node.url ? <iframe src={node.url} className="w-full h-full border-none" style={{ paddingTop: 20 }} sandbox="allow-scripts allow-same-origin" /> : <div className="flex items-center justify-center h-full text-sm pt-4" style={{ color: '#858585' }}>双击设置URL</div>}
+      </div>;
+    }
+
+    function RectangleNode({ node, isSelected, onNodeMouseDown, onNodeDoubleClick }) {
+      return <div className={`group-node ${isSelected ? 'node-selected' : ''}`} style={{ position: 'absolute', left: 0, top: 0, width: node.width || 120, height: node.height || 90, minWidth: 20, minHeight: 20, cursor: isSelected ? 'move' : 'pointer', userSelect: 'none' }} onMouseDown={e => onNodeMouseDown(node.id, e)} onDoubleClick={e => { e.stopPropagation(); onNodeDoubleClick(node.id); }} />;
+    }
+
+    function LineNode({ node, isSelected, onNodeMouseDown }) {
+      const x1 = node.x, y1 = node.y, x2 = node.x2 ?? node.x + (node.width || 0), y2 = node.y2 ?? node.y + (node.height || 0);
+      const minX = Math.min(x1, x2), minY = Math.min(y1, y2);
+      const svgW = Math.abs(x2 - x1) + 8, svgH = Math.abs(y2 - y1) + 8;
+      const sx1 = x1 - minX + 4, sy1 = y1 - minY + 4, sx2 = x2 - minX + 4, sy2 = y2 - minY + 4;
+      const color = node.color || '#f472b6';
+      return <div className={isSelected ? 'node-selected' : ''} style={{ position: 'absolute', left: minX - 4, top: minY - 4, width: svgW, height: svgH, overflow: 'visible', cursor: isSelected ? 'move' : 'pointer', userSelect: 'none' }} onMouseDown={e => onNodeMouseDown(node.id, e)}>
+        <svg width={svgW} height={svgH} style={{ overflow: 'visible', pointerEvents: 'none' }}>
+          {node.type === 'arrow' && <defs><marker id={`ah_${node.id}`} markerWidth="9" markerHeight="6" refX="9" refY="3" orient="auto"><polygon points="0 0, 9 3, 0 6" fill={color} /></marker></defs>}
+          <line x1={sx1} y1={sy1} x2={sx2} y2={sy2} stroke={color} strokeWidth="2" strokeLinecap="round" markerEnd={node.type === 'arrow' ? `url(#ah_${node.id})` : undefined} />
+        </svg>
+      </div>;
+    }
+
+    function NodeRenderer({ node, isSelected, isEditing, onNodeMouseDown, onNodeDoubleClick }) {
+      const Wrapper = ({ children }) => <div style={{ position: 'relative', width: '100%', height: '100%' }}>{children}{isSelected && <ResizeHandles nodeId={node.id} />}</div>;
+      switch (node.type) {
+        case 'text': return <Wrapper><TextNode node={node} isSelected={isSelected} isEditing={isEditing} onNodeMouseDown={onNodeMouseDown} onNodeDoubleClick={onNodeDoubleClick} /></Wrapper>;
+        case 'image': return <Wrapper><ImageNode node={node} isSelected={isSelected} onNodeMouseDown={onNodeMouseDown} /></Wrapper>;
+        case 'iframe': return <Wrapper><IframeNode node={node} isSelected={isSelected} onNodeMouseDown={onNodeMouseDown} onNodeDoubleClick={onNodeDoubleClick} /></Wrapper>;
+        case 'rectangle': return <Wrapper><RectangleNode node={node} isSelected={isSelected} onNodeMouseDown={onNodeMouseDown} onNodeDoubleClick={onNodeDoubleClick} /></Wrapper>;
+        case 'line': case 'arrow': return <LineNode node={node} isSelected={isSelected} onNodeMouseDown={onNodeMouseDown} />;
+        default: return null;
+      }
+    }
+
+    function PinMarker({ pin, tool, onMouseDown }) {
+      return <div data-pin-id={pin.id} style={{ position: 'absolute', left: pin.x - 8, top: pin.y - 18, cursor: tool === 'select' ? 'move' : 'pointer', zIndex: 50 }} title={pin.label || '图钉'} onMouseDown={onMouseDown}>
+        <div className="flex flex-col items-center pointer-events-none">
+          <div className="w-3.5 h-3.5 rounded-full shadow-lg border-2" style={{ background: '#d4a72c', borderColor: 'rgba(255,255,255,0.7)', boxShadow: '0 0 8px rgba(212,167,44,0.4)' }} />
+          <div className="w-0.5 h-4" style={{ background: 'rgba(212,167,44,0.6)' }} />
+        </div>
+      </div>;
+    }
+
+    function ShapePreview({ preview }) {
+      if (!preview) return null;
+      return <div style={{ position: 'absolute', left: preview.x, top: preview.y, width: preview.w || 4, height: preview.h || 4, border: preview.type === 'rectangle' ? '2px dashed rgba(255,255,255,0.35)' : '2px dashed #f472b6', background: preview.type === 'rectangle' ? 'rgba(255,255,255,0.03)' : 'transparent', borderRadius: preview.type === 'rectangle' ? 6 : 0, pointerEvents: 'none', zIndex: 9999 }}>
+        {(preview.type === 'line' || preview.type === 'arrow') && <svg width={preview.w + 8} height={preview.h + 8} style={{ position: 'absolute', left: -4, top: -4, overflow: 'visible', pointerEvents: 'none' }}>
+          {preview.type === 'arrow' && <defs><marker id="pv_ah" markerWidth="9" markerHeight="6" refX="9" refY="3" orient="auto"><polygon points="0 0, 9 3, 0 6" fill="#f472b6" /></marker></defs>}
+          <line x1={preview.startX < preview.endX ? 4 : preview.w + 4} y1={preview.startY < preview.endY ? 4 : preview.h + 4} x2={preview.startX < preview.endX ? preview.w + 4 : 4} y2={preview.startY < preview.endY ? preview.h + 4 : 4} stroke="#f472b6" strokeWidth="2" strokeDasharray="5,3" strokeLinecap="round" markerEnd={preview.type === 'arrow' ? 'url(#pv_ah)' : undefined} />
+        </svg>}
+      </div>;
+    }
+
+    function StatusBar({ vp, nodesCount, pinsCount }) {
+      return <>
+        <div className="fixed bottom-2 left-2 z-40 px-2 py-1 rounded text-xs pointer-events-none select-none" style={{ background: 'rgba(30,30,30,0.8)', color: '#858585', border: '1px solid rgba(255,255,255,0.06)' }}>{Math.round(vp.zoom * 100)}% · {nodesCount}元素 · {pinsCount}图钉</div>
+        <div className="fixed bottom-2 left-1/2 -translate-x-1/2 z-40 px-2 py-1 rounded text-xs pointer-events-none select-none opacity-50" style={{ color: '#858585' }}>拖拽平移 · 滚轮缩放 · 双击创建文字 · Ctrl+V粘贴 · 拖入图片</div>
+      </>;
+    }
+
+    function BoardListPage() {
+      const boards = useStore(s => s.boards);
+      const setCurrentBoardId = useStore(s => s.setCurrentBoardId);
+      const createBoard = useStore(s => s.createBoard);
+      const deleteBoard = useStore(s => s.deleteBoard);
+      const deleteDialogTarget = useStore(s => s.deleteDialogTarget);
+      const setDeleteDialogTarget = useStore(s => s.setDeleteDialogTarget);
+      const clearDeleteDialogTarget = useStore(s => s.clearDeleteDialogTarget);
+      const [newName, setNewName] = React.useState('');
+      const keys = Object.keys(boards);
+
+      return (
+        <div className="w-screen h-screen flex flex-col items-center justify-start pt-16 px-6" style={{ background: '#1e1e1e' }}>
+          <div className="w-full max-w-3xl">
+            <h1 className="text-2xl font-semibold mb-1" style={{ color: '#e0e0e0' }}>白板笔记</h1>
+            <p className="text-xs mb-6" style={{ color: '#858585' }}>选择一个画布开始，或创建新画布</p>
+            <div className="flex gap-2 mb-6">
+              <input type="text" value={newName} onChange={e => setNewName(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') { const n = newName.trim() || `画布_${keys.length + 1}`; createBoard(n); setNewName(''); } }} placeholder="新画布名称..." className="flex-1 px-3 py-2 text-sm rounded-md outline-none border" style={{ background: '#3c3c3c', borderColor: '#3e3e3e', color: '#cccccc' }} />
+              <button onClick={() => { const n = newName.trim() || `画布_${keys.length + 1}`; createBoard(n); setNewName(''); }} className="px-4 py-2 rounded-md text-sm font-medium cursor-pointer flex items-center gap-1.5" style={{ background: '#007acc', color: '#fff', border: 'none' }}><Plus size={15} /> 新建</button>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+              {keys.map(key => {
+                const board = boards[key];
+                return (
+                  <div key={key} onClick={() => setCurrentBoardId(key)} className="rounded-lg p-4 cursor-pointer transition-all border group relative" style={{ background: '#252526', borderColor: '#3e3e3e' }} onMouseEnter={e => { e.currentTarget.style.borderColor = '#007acc'; e.currentTarget.style.background = '#2a2d2e'; }} onMouseLeave={e => { e.currentTarget.style.borderColor = '#3e3e3e'; e.currentTarget.style.background = '#252526'; }}>
+                    <div className="flex-1 min-w-0">
+                      <h3 className="text-sm font-semibold truncate" style={{ color: '#e0e0e0' }}>{board?.name || key}</h3>
+                      <p className="text-xs mt-1" style={{ color: '#858585' }}>{board?.nodes?.length || 0} 元素 · {board?.pins?.length || 0} 图钉</p>
+                    </div>
+                    {keys.length > 1 && <button onClick={e => { e.stopPropagation(); setDeleteDialogTarget(key); }} className="absolute top-2 right-2 p-1 rounded opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer" style={{ color: '#858585' }} title="删除"><Trash2 size={13} /></button>}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+          <Dialog.Root open={!!deleteDialogTarget} onOpenChange={open => { if (!open) clearDeleteDialogTarget(); }}>
+            <Dialog.Portal>
+              <Dialog.Overlay className="fixed inset-0 z-[10000]" style={{ background: 'rgba(0,0,0,0.5)' }} />
+              <Dialog.Content className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-[10001] rounded-lg p-5 shadow-2xl border" style={{ background: '#252526', borderColor: '#3e3e3e', minWidth: 320 }}>
+                <Dialog.Title className="text-sm font-semibold mb-2" style={{ color: '#e0e0e0' }}>确认删除</Dialog.Title>
+                <VisuallyHidden.Root asChild><Dialog.Description>确定要删除画布吗？此操作不可撤销。</Dialog.Description></VisuallyHidden.Root>
+                <p className="text-xs mb-5" style={{ color: '#858585' }}>确定要删除画布 "{deleteDialogTarget ? (boards[deleteDialogTarget]?.name || deleteDialogTarget) : ''}" 吗？此操作不可撤销。</p>
+                <div className="flex justify-end gap-2">
+                  <Dialog.Close asChild><button className="px-3 py-1.5 rounded text-xs cursor-pointer" style={{ background: '#3c3c3c', color: '#cccccc', border: '1px solid #3e3e3e' }}>取消</button></Dialog.Close>
+                  <button onClick={() => { if (deleteDialogTarget) deleteBoard(deleteDialogTarget); clearDeleteDialogTarget(); }} className="px-3 py-1.5 rounded text-xs cursor-pointer" style={{ background: '#e06c75', color: '#fff', border: 'none' }}>确认删除</button>
+                </div>
+              </Dialog.Content>
+            </Dialog.Portal>
+          </Dialog.Root>
+        </div>
+      );
+    }
+
+    function Toolbar() {
+      const tool = useStore(s => s.tool);
+      const setTool = useStore(s => s.setTool);
+      const selectedNodeId = useStore(s => s.selectedNodeId);
+      const deleteNode = useStore(s => s.deleteNode);
+      const undo = useStore(s => s.undo);
+      const redo = useStore(s => s.redo);
+      const exportBoard = useStore(s => s.exportBoard);
+      const importBoard = useStore(s => s.importBoard);
+      const setShowMinimap = useStore(s => s.setShowMinimap);
+      const showMinimap = useStore(s => s.showMinimap);
+      const pinPanelOpen = useStore(s => s.pinPanelOpen);
+      const setPinPanelOpen = useStore(s => s.setPinPanelOpen);
+      const boards = useStore(s => s.boards);
+      const currentBoardId = useStore(s => s.currentBoardId);
+      const board = boards[currentBoardId];
+      const canUndo = board?.history?.past?.length > 0;
+      const canRedo = board?.history?.future?.length > 0;
+      const pins = board?.pins || [];
+      const goToPin = useStore(s => s.goToPin);
+      const deletePin = useStore(s => s.deletePin);
+
+      const toolItems = [
+        { value: 'select', icon: MousePointer2, label: '选择 (V)' },
+        { value: 'rectangle', icon: Square, label: '分组框 (R)' },
+        { value: 'line', icon: LineIcon, label: '直线 (L)' },
+        { value: 'arrow', icon: ArrowRight, label: '箭头 (A)' },
+        { value: 'pin', icon: MapPin, label: '图钉 (P)' },
+      ];
+
+      const handleImport = () => {
+        const inp = document.createElement('input'); inp.type = 'file'; inp.accept = '.json';
+        inp.onchange = e => { const file = e.target.files[0]; if (!file) return; const r = new FileReader(); r.onload = ev => { importBoard(ev.target.result); }; r.readAsText(file); };
+        inp.click();
+      };
+
+      return (
+        <Tooltip.Provider delayDuration={400}>
+          <div className="fixed top-2 left-1/2 -translate-x-1/2 z-50 flex items-center gap-0.5 px-2 py-1 rounded-lg shadow-2xl border" style={{ background: '#252526', borderColor: '#3e3e3e' }}>
+            <ToggleGroup.Root type="single" value={tool} onValueChange={v => setTool(v || 'select')} className="flex items-center gap-0.5">
+              {toolItems.map(t => (
+                <Tooltip.Root key={t.value}><Tooltip.Trigger asChild><ToggleGroup.Item value={t.value} className="toggle-group-item p-1.5 rounded transition-all flex items-center justify-center border-none"><t.icon size={15} /></ToggleGroup.Item></Tooltip.Trigger><Tooltip.Portal><Tooltip.Content className="px-2 py-1 text-xs rounded shadow border" style={{ background: '#333', color: '#ddd', borderColor: '#555' }} sideOffset={6}>{t.label}<Tooltip.Arrow style={{ fill: '#333' }} /></Tooltip.Content></Tooltip.Portal></Tooltip.Root>
+              ))}
+            </ToggleGroup.Root>
+            <div className="w-px h-4 mx-1" style={{ background: '#3e3e3e' }} />
+            <ToolbarButton onClick={undo} disabled={!canUndo} title="撤销 Ctrl+Z"><Undo2 size={15} /></ToolbarButton>
+            <ToolbarButton onClick={redo} disabled={!canRedo} title="重做 Ctrl+Shift+Z"><Redo2 size={15} /></ToolbarButton>
+            {selectedNodeId && <><div className="w-px h-4 mx-1" style={{ background: '#3e3e3e' }} /><ToolbarButton onClick={() => deleteNode(selectedNodeId)} title="删除 Delete" active activeColor="#e06c75"><Trash2 size={15} /></ToolbarButton></>}
+            <div className="w-px h-4 mx-1" style={{ background: '#3e3e3e' }} />
+            <ToolbarButton onClick={exportBoard} title="导出 JSON"><Download size={15} /></ToolbarButton>
+            <ToolbarButton onClick={handleImport} title="导入 JSON"><Upload size={15} /></ToolbarButton>
+            <div className="w-px h-4 mx-1" style={{ background: '#3e3e3e' }} />
+            <ToolbarButton onClick={() => setShowMinimap(!showMinimap)} title="小地图" active={showMinimap}><MapIcon size={15} /></ToolbarButton>
+            <Popover.Root open={pinPanelOpen} onOpenChange={setPinPanelOpen}>
+              <Popover.Trigger asChild>
+                <button className="p-1.5 rounded transition-all flex items-center justify-center" style={{ color: pinPanelOpen ? '#d4a72c' : '#858585', background: 'transparent' }} onMouseEnter={e => { if (!pinPanelOpen) e.currentTarget.style.background = '#3c3c3c'; }} onMouseLeave={e => { if (!pinPanelOpen) e.currentTarget.style.background = 'transparent'; }}><Pin size={15} /></button>
+              </Popover.Trigger>
+              <Popover.Portal>
+                <Popover.Content className="rounded-lg border shadow-2xl z-[9998]" style={{ background: '#252526', borderColor: '#3e3e3e', width: 220 }} sideOffset={8} align="end">
+                  <div className="flex items-center justify-between px-3 py-2 border-b" style={{ borderColor: '#3e3e3e' }}><span className="text-xs font-semibold" style={{ color: '#cccccc' }}>📌 图钉 ({pins.length})</span><Popover.Close asChild><button className="p-0.5 rounded cursor-pointer" style={{ color: '#858585' }}><X size={13} /></button></Popover.Close></div>
+                  <ScrollArea.Root className="max-h-56 overflow-hidden">
+                    <ScrollArea.Viewport className="max-h-56 w-full">
+                      {pins.length === 0 ? <p className="text-xs px-3 py-4 text-center" style={{ color: '#858585' }}>使用图钉工具点击画布放置</p> :
+                        pins.map(pin => <div key={pin.id} onClick={() => goToPin(pin.id)} className="flex items-center justify-between px-3 py-1.5 cursor-pointer text-xs transition-colors group" style={{ color: '#cccccc' }} onMouseEnter={e => e.currentTarget.style.background = '#2a2d2e'} onMouseLeave={e => e.currentTarget.style.background = 'transparent'}><span className="truncate flex-1">{pin.label || '图钉'}</span><span className="text-xs mr-1" style={{ color: '#555' }}>({Math.round(pin.x)},{Math.round(pin.y)})</span><button onClick={e => { e.stopPropagation(); deletePin(pin.id); }} className="p-0.5 rounded opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer" style={{ color: '#e06c75' }}><Trash2 size={11} /></button></div>)
+                      }
+                    </ScrollArea.Viewport>
+                    <ScrollArea.Scrollbar orientation="vertical" className="w-1.5 bg-transparent"><ScrollArea.Thumb className="rounded-full" style={{ background: 'rgba(255,255,255,0.15)' }} /></ScrollArea.Scrollbar>
+                  </ScrollArea.Root>
+                  <Popover.Arrow style={{ fill: '#252526' }} />
+                </Popover.Content>
+              </Popover.Portal>
+            </Popover.Root>
+          </div>
+        </Tooltip.Provider>
+      );
+    }
+
+    function Minimap() {
+      const show = useStore(s => s.showMinimap);
+      const boards = useStore(s => s.boards);
+      const currentBoardId = useStore(s => s.currentBoardId);
+      const setViewport = useStore(s => s.setViewport);
+      const board = boards[currentBoardId];
+      const nodes = board?.nodes || [], pins = board?.pins || [], vp = board?.viewport || { x: 0, y: 0, zoom: 1 };
+      if (!show) return null;
+      const mmW = 180, mmH = 120;
+      let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+      nodes.forEach(n => { const nx = n.x, ny = n.y, nw = n.width || 60, nh = n.height || 30; minX = Math.min(minX, nx); minY = Math.min(minY, ny); maxX = Math.max(maxX, nx + nw); maxY = Math.max(maxY, ny + nh); if (n.type === 'line' || n.type === 'arrow') { const ex = n.x2 !== undefined ? n.x2 : nx + nw, ey = n.y2 !== undefined ? n.y2 : ny + nh; minX = Math.min(minX, ex); minY = Math.min(minY, ey); maxX = Math.max(maxX, ex); maxY = Math.max(maxY, ey); } });
+      pins.forEach(p => { minX = Math.min(minX, p.x); minY = Math.min(minY, p.y); maxX = Math.max(maxX, p.x); maxY = Math.max(maxY, p.y); });
+      if (!isFinite(minX)) { minX = -400; minY = -400; maxX = 400; maxY = 400; }
+      const padX = (maxX - minX) * 0.4 + 80, padY = (maxY - minY) * 0.4 + 80;
+      const scale = Math.min(mmW / (maxX - minX + padX * 2), mmH / (maxY - minY + padY * 2));
+      const offX = (mmW - (maxX - minX + padX * 2) * scale) / 2, offY = (mmH - (maxY - minY + padY * 2) * scale) / 2;
+      const toMM = (wx, wy) => ({ mx: offX + (wx - minX + padX) * scale, my: offY + (wy - minY + padY) * scale });
+      const sw = window.innerWidth, sh = window.innerHeight;
+      const vpL = -vp.x / vp.zoom, vpT = -vp.y / vp.zoom;
+      const vpTL = toMM(vpL, vpT), vpBR = toMM(vpL + sw / vp.zoom, vpT + sh / vp.zoom);
+      return <div className="fixed bottom-3 right-3 z-40 rounded-lg border shadow-lg overflow-hidden cursor-pointer" style={{ background: '#252526', borderColor: '#3e3e3e', width: mmW + 10, height: mmH + 28 }} onClick={e => { const r = e.currentTarget.getBoundingClientRect(); const cx = e.clientX - r.left - 5, cy = e.clientY - r.top - 18; const wx = minX - padX + (cx - offX) / scale, wy = minY - padY + (cy - offY) / scale; setViewport({ x: sw / 2 - wx * vp.zoom, y: sh / 2 - wy * vp.zoom }); }}>
+        <div className="text-xs text-center pt-1 font-medium" style={{ color: '#858585' }}>小地图</div>
+        <div className="relative mx-1 mt-0.5 rounded" style={{ width: mmW, height: mmH, background: '#1a1a1a' }}>
+          {nodes.map(n => { const tl = toMM(n.x, n.y), br = toMM(n.x + (n.width || 60), n.y + (n.height || 30)); let c = 'rgba(148,163,184,0.5)'; if (n.type === 'image') c = 'rgba(96,165,250,0.6)'; if (n.type === 'iframe') c = 'rgba(167,139,250,0.6)'; if (n.type === 'text') c = 'rgba(251,191,36,0.55)'; if (n.type === 'rectangle') c = 'rgba(255,255,255,0.2)'; if (n.type === 'line' || n.type === 'arrow') c = 'rgba(244,114,182,0.5)'; return <div key={n.id} className="minimap-dot" style={{ left: tl.mx, top: tl.my, width: Math.max(br.mx - tl.mx, 2), height: Math.max(br.my - tl.my, 2), backgroundColor: c }} />; })}
+          {pins.map(p => { const pm = toMM(p.x, p.y); return <div key={p.id} className="minimap-pin" style={{ left: pm.mx, top: pm.my }} />; })}
+          <div className="absolute border rounded-sm pointer-events-none" style={{ left: Math.max(0, vpTL.mx), top: Math.max(0, vpTL.my), width: Math.min(vpBR.mx - vpTL.mx, mmW), height: Math.min(vpBR.my - vpTL.my, mmH), borderColor: '#007acc' }} />
+        </div>
+      </div>;
+    }
+
+    function Canvas() {
+      const boards = useStore(s => s.boards);
+      const currentBoardId = useStore(s => s.currentBoardId);
+      const selectedNodeId = useStore(s => s.selectedNodeId);
+      const tool = useStore(s => s.tool);
+      const dragging = useStore(s => s.dragging);
+      const editingNodeId = useStore(s => s.editingNodeId);
+      const shapePreview = useStore(s => s.shapePreview);
+      const resizing = useStore(s => s.resizing);
+      const setViewport = useStore(s => s.setViewport);
+      const zoomAt = useStore(s => s.zoomAt);
+      const selectNode = useStore(s => s.selectNode);
+      const deselectAll = useStore(s => s.deselectAll);
+      const stopEditingNode = useStore(s => s.stopEditingNode);
+      const startEditingNode = useStore(s => s.startEditingNode);
+      const addNode = useStore(s => s.addNode);
+      const updateNode = useStore(s => s.updateNode);
+      const addPin = useStore(s => s.addPin);
+      const updatePin = useStore(s => s.updatePin);
+      const startDrag = useStore(s => s.startDrag);
+      const updateDrag = useStore(s => s.updateDrag);
+      const endDrag = useStore(s => s.endDrag);
+      const setShapePreview = useStore(s => s.setShapePreview);
+      const updateResizing = useStore(s => s.updateResizing);
+      const endResizing = useStore(s => s.endResizing);
+      const copySelectedNode = useStore(s => s.copySelectedNode);
+      const pasteNode = useStore(s => s.pasteNode);
+      const undo = useStore(s => s.undo);
+      const redo = useStore(s => s.redo);
+      const setTool = useStore(s => s.setTool);
+      const deleteNode = useStore(s => s.deleteNode);
+      const setPinPanelOpen = useStore(s => s.setPinPanelOpen);
+
+      const board = boards[currentBoardId];
+      const nodes = board?.nodes || [], pins = board?.pins || [], vp = board?.viewport || { x: 0, y: 0, zoom: 1 };
+      const canvasRef = React.useRef(null);
+      const sortedNodes = React.useMemo(() => { const rects = nodes.filter(n => n.type === 'rectangle'); return [...rects, ...nodes.filter(n => n.type !== 'rectangle')]; }, [nodes]);
+      const screenToWorld = React.useCallback((sx, sy) => { const r = canvasRef.current?.getBoundingClientRect(); return { wx: ((r ? sx - r.left : sx) - vp.x) / vp.zoom, wy: ((r ? sy - r.top : sy) - vp.y) / vp.zoom }; }, [vp.x, vp.y, vp.zoom]);
+      const isNodeInsideRect = (node, rect) => { if (node.type === 'rectangle') return false; const cx = node.x + (node.width || 60) / 2, cy = node.y + (node.height || 30) / 2; return cx >= rect.x && cx <= rect.x + (rect.width || 120) && cy >= rect.y && cy <= rect.y + (rect.height || 90); };
+
+      const handleDragOver = e => { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; };
+      const handleDrop = async e => {
+        e.preventDefault();
+        const files = Array.from(e.dataTransfer.files).filter(f => f.type.startsWith('image/'));
+        if (!files.length) return;
+        const { wx, wy } = screenToWorld(e.clientX, e.clientY);
+        for (const file of files) {
+          try {
+            const cb = await compressImageToWebP(file);
+            const imgId = genId();
+            await saveImageToDB(imgId, cb);
+            const url = URL.createObjectURL(cb);
+            const img = new Image();
+            img.onload = () => { const ratio = Math.min(1, 360 / img.width); addNode({ id: genId(), type: 'image', x: wx - (img.width * ratio) / 2, y: wy - (img.height * ratio) / 2, width: img.width * ratio, height: img.height * ratio, src: url, imageId: imgId }); };
+            img.src = url;
+          } catch (err) { console.error(err); }
+        }
+      };
+
+      const handleMouseDown = React.useCallback(e => {
+        if (e.button !== 0) return;
+        if (resizing) { endResizing(); return; }
+        const pinEl = e.target.closest('[data-pin-id]');
+        if (pinEl) {
+          e.stopPropagation();
+          const pinId = pinEl.getAttribute('data-pin-id');
+          const pin = pins.find(p => p.id === pinId);
+          if (pin && tool === 'select') { const { wx, wy } = screenToWorld(e.clientX, e.clientY); startDrag('pin', { pinId, offsetX: wx - pin.x, offsetY: wy - pin.y, startX: pin.x, startY: pin.y, didMove: false }); return; }
+        }
+        if (e.target.closest('.resize-handle')) return;
+        const { wx, wy } = screenToWorld(e.clientX, e.clientY);
+        const targetNodeEl = e.target.closest('[data-node-id]');
+        const nodeId = targetNodeEl?.getAttribute('data-node-id');
+        if (tool === 'select') {
+          if (nodeId && !editingNodeId) {
+            selectNode(nodeId);
+            const node = nodes.find(n => n.id === nodeId);
+            if (node) {
+              const contained = node.type === 'rectangle' ? nodes.filter(n => n.id !== nodeId && isNodeInsideRect(n, node)).map(n => ({ id: n.id, origX: n.x, origY: n.y })) : [];
+              startDrag('node', { nodeId, offsetX: wx - node.x, offsetY: wy - node.y, startX: node.x, startY: node.y, didMove: false, containedNodes: contained, origRectX: node.x, origRectY: node.y });
+            }
+          } else if (!nodeId && !editingNodeId) { deselectAll(); stopEditingNode(); startDrag('canvas', { startX: e.clientX, startY: e.clientY, vpX: vp.x, vpY: vp.y }); }
+        } else if (tool === 'pin') {
+          if (!nodeId && !pinEl) { const pid = genId(); addPin({ id: pid, x: wx, y: wy, label: `图钉 ${pins.length + 1}` }); setPinPanelOpen(true); }
+        } else if (['rectangle', 'line', 'arrow'].includes(tool)) {
+          if (!nodeId && !pinEl) { startDrag('shape', { shapeType: tool, startWorldX: wx, startWorldY: wy }); setShapePreview({ type: tool, x: wx, y: wy, w: 0, h: 0, startX: wx, startY: wy, endX: wx, endY: wy }); }
+        }
+      }, [tool, screenToWorld, nodes, pins, editingNodeId, resizing]);
+
+      const handleMouseMove = React.useCallback(e => {
+        if (resizing) { const node = nodes.find(n => n.id === resizing.nodeId); updateResizing(e.clientX, e.clientY, node?.type === 'image' ? true : !e.shiftKey); return; }
+        if (!dragging) return;
+        if (dragging.type === 'canvas') setViewport({ x: dragging.vpX + e.clientX - dragging.startX, y: dragging.vpY + e.clientY - dragging.startY });
+        else if (dragging.type === 'node' && dragging.nodeId) {
+          const { wx, wy } = screenToWorld(e.clientX, e.clientY);
+          const nx = wx - dragging.offsetX, ny = wy - dragging.offsetY;
+          updateDrag({ didMove: Math.abs(nx - dragging.startX) > 1 || Math.abs(ny - dragging.startY) > 1 });
+          const node = nodes.find(n => n.id === dragging.nodeId);
+          if (node) {
+            if (node.type === 'line' || node.type === 'arrow') { updateNode(dragging.nodeId, { x: nx, y: ny, x2: (node.x2 ?? node.x + (node.width || 0)) + (nx - node.x), y2: (node.y2 ?? node.y + (node.height || 0)) + (ny - node.y) }); }
+            else updateNode(dragging.nodeId, { x: nx, y: ny });
+            if (dragging.containedNodes?.length) {
+              const rdx = nx - dragging.origRectX, rdy = ny - dragging.origRectY;
+              const map = new Map();
+              dragging.containedNodes.forEach(cn => map.set(cn.id, { x: cn.origX + rdx, y: cn.origY + rdy }));
+              useStore.getState().updateNodesBatch(map);
+            }
+          }
+        } else if (dragging.type === 'pin') { const { wx, wy } = screenToWorld(e.clientX, e.clientY); updatePin(dragging.pinId, { x: wx - dragging.offsetX, y: wy - dragging.offsetY }); updateDrag({ didMove: true }); }
+        else if (dragging.type === 'shape') { const { wx, wy } = screenToWorld(e.clientX, e.clientY); setShapePreview({ type: dragging.shapeType, x: Math.min(dragging.startWorldX, wx), y: Math.min(dragging.startWorldY, wy), w: Math.abs(wx - dragging.startWorldX), h: Math.abs(wy - dragging.startWorldY), startX: dragging.startWorldX, startY: dragging.startWorldY, endX: wx, endY: wy }); updateDrag({ endWorldX: wx, endWorldY: wy }); }
+      }, [dragging, resizing, nodes]);
+
+      const handleMouseUp = React.useCallback(() => { if (resizing) endResizing(); else if (dragging) endDrag(); }, [dragging, resizing]);
+
+      const handleDoubleClick = React.useCallback(e => {
+        const targetNodeEl = e.target.closest('[data-node-id]');
+        const nodeId = targetNodeEl?.getAttribute('data-node-id');
+        if (nodeId) {
+          const node = nodes.find(n => n.id === nodeId);
+          if (!node) return;
+          if (node.type === 'text') startEditingNode(nodeId);
+          else if (node.type === 'iframe') { const u = prompt('iframe URL:', node.url || 'https://'); if (u !== null && u.trim()) updateNode(nodeId, { url: u.trim() }); }
+          else if (node.type === 'rectangle') { const l = prompt('分组标签:', node.label || ''); if (l !== null) updateNode(nodeId, { label: l.trim() }); }
+        } else if (tool === 'select') {
+          const { wx, wy } = screenToWorld(e.clientX, e.clientY);
+          const newNode = { id: genId(), type: 'text', x: wx - 80, y: wy - 20, width: 240, height: 40, content: '' };
+          addNode(newNode);
+          setTimeout(() => startEditingNode(newNode.id), 60);
+        }
+      }, [nodes, tool, screenToWorld]);
+
+      const handleNodeMouseDown = React.useCallback((nodeId, e) => {
+        if (tool !== 'select' || editingNodeId) return;
+        e.stopPropagation();
+        const node = nodes.find(n => n.id === nodeId);
+        if (!node) return;
+        const { wx, wy } = screenToWorld(e.clientX, e.clientY);
+        selectNode(nodeId);
+        const contained = node.type === 'rectangle' ? nodes.filter(n => n.id !== nodeId && isNodeInsideRect(n, node)).map(n => ({ id: n.id, origX: n.x, origY: n.y })) : [];
+        startDrag('node', { nodeId, offsetX: wx - node.x, offsetY: wy - node.y, startX: node.x, startY: node.y, didMove: false, containedNodes: contained, origRectX: node.x, origRectY: node.y });
+      }, [tool, editingNodeId, nodes, screenToWorld]);
+
+      const handleWheel = React.useCallback(e => { e.preventDefault(); zoomAt(e.clientX, e.clientY, e.deltaY < 0 ? 1 : -1); }, [zoomAt]);
+
+      const handlePaste = React.useCallback(async e => {
+        if (document.activeElement?.contentEditable === 'true' || document.activeElement?.tagName === 'INPUT' || document.activeElement?.tagName === 'TEXTAREA') return;
+        const items = e.clipboardData?.items;
+        if (!items) return;
+        const { wx, wy } = screenToWorld(window.innerWidth / 2, window.innerHeight / 2);
+        let handled = false;
+        for (const item of items) {
+          if (item.type.startsWith('image/')) {
+            const blob = item.getAsFile();
+            if (blob) {
+              try {
+                const cb = await compressImageToWebP(blob);
+                const imgId = genId();
+                await saveImageToDB(imgId, cb);
+                const url = URL.createObjectURL(cb);
+                const img = new Image();
+                img.onload = () => { const ratio = Math.min(1, 360 / img.width); addNode({ id: genId(), type: 'image', x: wx - (img.width * ratio) / 2, y: wy - (img.height * ratio) / 2, width: img.width * ratio, height: img.height * ratio, src: url, imageId: imgId }); };
+                img.src = url;
+                handled = true;
+              } catch (err) { console.error(err); }
+            }
+          } else if (item.type === 'text/plain' && !handled) {
+            item.getAsString(text => { if (text.trim()) addNode({ id: genId(), type: 'text', x: wx - 110, y: wy - 20, width: 260, height: 50, content: text.trim() }); });
+            handled = true;
+          }
+        }
+        if (handled) e.preventDefault();
+      }, [screenToWorld, addNode]);
+
+      React.useEffect(() => {
+        const handler = e => {
+          if (document.activeElement?.contentEditable === 'true' || document.activeElement?.tagName === 'INPUT' || document.activeElement?.tagName === 'TEXTAREA') return;
+          const ctrl = e.ctrlKey || e.metaKey;
+          if (e.key === 'Delete' || e.key === 'Backspace') { const sid = useStore.getState().selectedNodeId; if (sid) { e.preventDefault(); deleteNode(sid); } }
+          else if (ctrl && e.key === 'z' && !e.shiftKey) { e.preventDefault(); undo(); }
+          else if (ctrl && e.key === 'z' && e.shiftKey) { e.preventDefault(); redo(); }
+          else if (ctrl && e.key === 'c') { e.preventDefault(); copySelectedNode(); }
+          else if (ctrl && e.key === 'v') { const { wx, wy } = screenToWorld(window.innerWidth / 2, window.innerHeight / 2); pasteNode(wx, wy); }
+          else if (e.key === 'v' && !ctrl) setTool('select');
+          else if (e.key === 'r' && !ctrl) setTool('rectangle');
+          else if (e.key === 'l' && !ctrl) setTool('line');
+          else if (e.key === 'a' && !ctrl) setTool('arrow');
+          else if (e.key === 'p' && !ctrl) setTool('pin');
+          else if (e.key === 'Escape') { deselectAll(); stopEditingNode(); setTool('select'); }
+        };
+        window.addEventListener('keydown', handler);
+        return () => window.removeEventListener('keydown', handler);
+      }, []);
+
+      return (
+        <div ref={canvasRef} className="dot-bg absolute inset-0" style={{ backgroundSize: `${22 * vp.zoom}px ${22 * vp.zoom}px`, backgroundPosition: `${vp.x}px ${vp.y}px` }} onMouseDown={handleMouseDown} onMouseMove={handleMouseMove} onMouseUp={handleMouseUp} onMouseLeave={handleMouseUp} onDoubleClick={handleDoubleClick} onWheel={handleWheel} onPaste={handlePaste} onDragOver={handleDragOver} onDrop={handleDrop} tabIndex={0}>
+          <div style={{ position: 'absolute', left: 0, top: 0, transform: `translate(${vp.x}px,${vp.y}px) scale(${vp.zoom})`, transformOrigin: '0 0', width: 0, height: 0 }}>
+            {sortedNodes.map(node => <div key={node.id} data-node-id={node.id} style={{ position: 'absolute', left: node.x, top: node.y, zIndex: node.type === 'rectangle' ? 1 : 10 }}><NodeRenderer node={node} isSelected={selectedNodeId === node.id} isEditing={editingNodeId === node.id} onNodeMouseDown={handleNodeMouseDown} onNodeDoubleClick={nid => { const n = nodes.find(nn => nn.id === nid); if (n?.type === 'text') startEditingNode(nid); else if (n?.type === 'iframe') { const u = prompt('iframe URL:', n.url || 'https://'); if (u !== null && u.trim()) updateNode(nid, { url: u.trim() }); } }} /></div>)}
+            <ShapePreview preview={shapePreview} />
+            {pins.map(pin => <PinMarker key={pin.id} pin={pin} tool={tool} onMouseDown={handleMouseDown} />)}
+          </div>
+          <StatusBar vp={vp} nodesCount={nodes.length} pinsCount={pins.length} />
+        </div>
+      );
+    }
+
+    function CanvasView() {
+      const goBackToList = useStore(s => s.goBackToList);
+      const boards = useStore(s => s.boards);
+      const currentBoardId = useStore(s => s.currentBoardId);
+      const board = boards[currentBoardId];
+      useImageLoader();
+      return <div className="relative w-screen h-screen overflow-hidden" style={{ background: '#1a1a24' }}>
+        <button onClick={goBackToList} className="fixed top-2 left-2 z-50 flex items-center gap-1 px-2 py-1.5 rounded-lg border text-xs cursor-pointer shadow-lg" style={{ background: '#252526', borderColor: '#3e3e3e', color: '#858585' }}><ChevronLeft size={14} /><span className="max-w-[120px] truncate">{board?.name || currentBoardId}</span></button>
+        <Toolbar /><Canvas /><Minimap />
+      </div>;
+    }
+
+    function App() {
+      const view = useStore(s => s.view);
+      if (view === 'board-list') return <BoardListPage />;
+      return <CanvasView />;
+    }
+
+    createRoot(document.getElementById("root")).render(<App />);
+  </script>
+</body>
+
+</html>
