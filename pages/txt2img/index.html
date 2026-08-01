@@ -1,0 +1,751 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <script type="importmap">
+        {
+            "imports": {
+                "react": "https://esm.sh/react@19.2.4",
+                "react/jsx-runtime": "https://esm.sh/react@19.2.4/jsx-runtime",
+                "react-dom/client": "https://esm.sh/react-dom@19.2.4/client",
+                "lucide-react": "https://esm.sh/lucide-react?external=react",
+                "zustand": "https://esm.sh/zustand?external=react"
+            }
+        }
+    </script>
+    <script src="https://cdn.jsdelivr.net/npm/@babel/standalone@latest/babel.min.js">
+    </script>
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4">
+    </script>
+    <style>
+        /* 自定义滚动条 - 暗色主题 */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #1e293b;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #475569;
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #64748b;
+        }
+        /* 数字输入框箭头隐藏 */
+        input[type=number]::-webkit-inner-spin-button,
+        input[type=number]::-webkit-outer-spin-button {
+            -webkit-appearance: none;
+            margin: 0;
+        }
+        input[type=number] {
+            -moz-appearance: textfield;
+        }
+        /* 滑块美化 */
+        input[type=range] {
+            -webkit-appearance: none;
+            appearance: none;
+            background: transparent;
+            cursor: pointer;
+        }
+        input[type=range]::-webkit-slider-runnable-track {
+            height: 3px;
+            background: #334155;
+            border-radius: 2px;
+        }
+        input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 14px;
+            height: 14px;
+            border-radius: 50%;
+            background: #3b82f6;
+            margin-top: -5.5px;
+            border: 2px solid #1e293b;
+            box-shadow: 0 0 8px rgba(59, 130, 246, 0.3);
+            transition: all 0.15s;
+        }
+        input[type=range]::-webkit-slider-thumb:hover {
+            transform: scale(1.15);
+            background: #60a5fa;
+        }
+        input[type=range]::-moz-range-track {
+            height: 3px;
+            background: #334155;
+            border-radius: 2px;
+            border: none;
+        }
+        input[type=range]::-moz-range-thumb {
+            width: 14px;
+            height: 14px;
+            border-radius: 50%;
+            background: #3b82f6;
+            border: 2px solid #1e293b;
+            cursor: pointer;
+        }
+        /* 颜色选择器 */
+        input[type=color] {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 32px;
+            height: 32px;
+            border: 2px solid #334155;
+            border-radius: 8px;
+            cursor: pointer;
+            background: transparent;
+            padding: 2px;
+            transition: border-color 0.2s;
+        }
+        input[type=color]:hover {
+            border-color: #3b82f6;
+        }
+        input[type=color]::-webkit-color-swatch-wrapper {
+            padding: 0;
+        }
+        input[type=color]::-webkit-color-swatch {
+            border: none;
+            border-radius: 5px;
+        }
+        input[type=color]::-moz-color-swatch {
+            border: none;
+            border-radius: 5px;
+        }
+        /* 过渡动画 */
+        .fade-in {
+            animation: fadeIn 0.25s ease-out;
+        }
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: scale(0.98);
+            }
+            to {
+                opacity: 1;
+                transform: scale(1);
+            }
+        }
+        /* 预览canvas圆角阴影 */
+        .preview-canvas {
+            border-radius: 12px;
+            box-shadow: 0 8px 30px rgba(0, 0, 0, 0.6);
+            max-width: 100%;
+            max-height: 100%;
+            object-fit: contain;
+        }
+        /* 比例按钮选中态 */
+        .ratio-btn.active {
+            background: #3b82f6;
+            color: white;
+            border-color: #3b82f6;
+        }
+        /* 全局字体 */
+        body {
+            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+        }
+    </style>
+</head>
+
+<body class="dark">
+    <div id="root"></div>
+
+    <script type="text/babel" data-type="module">
+        import * as React from "react";
+        window.React = React;
+    </script>
+
+    <script type="text/babel" data-type="module">
+        import { createRoot } from "react-dom/client";
+        import {
+            Download,
+            Copy,
+            Check,
+            RefreshCw,
+            Type,
+            Palette,
+            AlignLeft,
+            AlignCenter,
+            AlignRight,
+            Square,
+            Image as ImageIcon,
+            Settings,
+            Maximize2,
+            Minus,
+            Plus,
+            RotateCw
+        } from "lucide-react";
+        import { create } from "zustand";
+
+        // ============ Zustand Store ============
+        const useStore = create((set) => ({
+            // 文本内容
+            text: "输入你的提示词...\n将文本转为图片",
+            // 样式
+            fontColor: "#ffffff",
+            bgColor: "#0f172a",
+            textAlign: "center",
+            fontFamily: "PingFang SC, Microsoft YaHei, sans-serif",
+            lineHeight: 1.6,
+            padding: 40,
+            showBorder: true,
+            borderColor: "#334155",
+            borderWidth: 2,
+            // 尺寸：固定宽度，高度根据比例计算
+            baseWidth: 800,
+            aspectRatio: "1:1", // "1:1", "3:4", "4:3", "16:9", "9:16"
+            // 字体自动缩放范围
+            minFontSize: 8,
+            maxFontSize: 200,
+            // setter
+            setText: (text) => set({ text }),
+            setFontColor: (fontColor) => set({ fontColor }),
+            setBgColor: (bgColor) => set({ bgColor }),
+            setTextAlign: (textAlign) => set({ textAlign }),
+            setFontFamily: (fontFamily) => set({ fontFamily }),
+            setLineHeight: (lineHeight) => set({ lineHeight }),
+            setPadding: (padding) => set({ padding }),
+            setShowBorder: (showBorder) => set({ showBorder }),
+            setBorderColor: (borderColor) => set({ borderColor }),
+            setBorderWidth: (borderWidth) => set({ borderWidth }),
+            setBaseWidth: (baseWidth) => set({ baseWidth }),
+            setAspectRatio: (aspectRatio) => set({ aspectRatio }),
+            reset: () => set({
+                text: "输入你的提示词...\n将文本转为图片",
+                fontColor: "#ffffff",
+                bgColor: "#0f172a",
+                textAlign: "center",
+                fontFamily: "PingFang SC, Microsoft YaHei, sans-serif",
+                lineHeight: 1.6,
+                padding: 40,
+                showBorder: true,
+                borderColor: "#334155",
+                borderWidth: 2,
+                baseWidth: 800,
+                aspectRatio: "1:1",
+            }),
+        }));
+
+        // ============ 工具函数 ============
+        // 解析比例字符串为宽/高数值
+        function parseRatio(ratioStr) {
+            const parts = ratioStr.split(':').map(Number);
+            if (parts.length !== 2 || parts.some(isNaN)) return 1;
+            return parts[0] / parts[1];
+        }
+
+        // 文本换行（保留手动换行，支持中英文混合）
+        function wrapText(ctx, text, maxWidth) {
+            const paragraphs = text.split('\n');
+            const allLines = [];
+            for (const para of paragraphs) {
+                if (para === '') {
+                    allLines.push('');
+                    continue;
+                }
+                const chars = [...para];
+                let currentLine = '';
+                for (const char of chars) {
+                    const testLine = currentLine + char;
+                    const metrics = ctx.measureText(testLine);
+                    if (metrics.width > maxWidth && currentLine !== '') {
+                        allLines.push(currentLine);
+                        currentLine = char;
+                    } else {
+                        currentLine = testLine;
+                    }
+                }
+                if (currentLine !== '') {
+                    allLines.push(currentLine);
+                }
+            }
+            return allLines;
+        }
+
+        // 计算自适应字号（二分查找）
+        function findOptimalFontSize(ctx, text, maxWidth, maxHeight, fontFamily, lineHeight, padding, minSize, maxSize) {
+            let low = minSize;
+            let high = maxSize;
+            let best = minSize;
+            const maxIter = 30;
+
+            for (let i = 0; i < maxIter; i++) {
+                const mid = Math.floor((low + high) / 2);
+                ctx.font = `${mid}px ${fontFamily}`;
+                const lines = wrapText(ctx, text, maxWidth - padding * 2);
+                const lineHeightPx = mid * lineHeight;
+                const totalTextHeight = lines.length * lineHeightPx;
+                const totalHeight = totalTextHeight + padding * 2;
+
+                if (totalHeight <= maxHeight && lines.length > 0) {
+                    best = mid;
+                    low = mid + 1;
+                } else {
+                    high = mid - 1;
+                }
+                if (low > high) break;
+            }
+            return Math.min(best, maxSize);
+        }
+
+        // ============ 主应用组件 ============
+        function App() {
+            const store = useStore();
+            const canvasRef = React.useRef(null);
+            const [copied, setCopied] = React.useState(false);
+            const [imageDataUrl, setImageDataUrl] = React.useState('');
+
+            // 计算当前尺寸
+            const ratio = parseRatio(store.aspectRatio);
+            const width = store.baseWidth;
+            const height = Math.round(width / ratio);
+
+            // 渲染图片（包含自适应字号）
+            const renderImage = React.useCallback(() => {
+                const canvas = canvasRef.current;
+                if (!canvas) return;
+                const ctx = canvas.getContext('2d');
+
+                const {
+                    text,
+                    fontColor,
+                    bgColor,
+                    textAlign,
+                    fontFamily,
+                    lineHeight,
+                    padding,
+                    showBorder,
+                    borderColor,
+                    borderWidth,
+                    minFontSize,
+                    maxFontSize,
+                } = store;
+
+                // 计算可用宽高
+                const availWidth = width - padding * 2;
+                const availHeight = height - padding * 2;
+
+                // 自适应字号
+                const optimalSize = findOptimalFontSize(
+                    ctx, text, width, height, fontFamily, lineHeight, padding,
+                    minFontSize, maxFontSize
+                );
+
+                // 设置canvas尺寸
+                canvas.width = width;
+                canvas.height = height;
+
+                // 绘制背景
+                ctx.fillStyle = bgColor;
+                ctx.fillRect(0, 0, width, height);
+
+                // 边框
+                if (showBorder) {
+                    ctx.strokeStyle = borderColor;
+                    ctx.lineWidth = borderWidth;
+                    ctx.strokeRect(borderWidth / 2, borderWidth / 2, width - borderWidth, height - borderWidth);
+                }
+
+                // 绘制文本
+                const fontSize = optimalSize;
+                ctx.font = `${fontSize}px ${fontFamily}`;
+                ctx.fillStyle = fontColor;
+                ctx.textBaseline = 'top';
+
+                // 换行
+                const lines = wrapText(ctx, text, availWidth);
+                const lineHeightPx = fontSize * lineHeight;
+                const totalTextHeight = lines.length * lineHeightPx;
+                const startY = padding + (availHeight - totalTextHeight) / 2;
+
+                // 对齐
+                let startX;
+                if (textAlign === 'left') startX = padding;
+                else if (textAlign === 'center') startX = width / 2;
+                else startX = width - padding;
+                ctx.textAlign = textAlign;
+
+                for (let i = 0; i < lines.length; i++) {
+                    const y = startY + i * lineHeightPx;
+                    ctx.fillText(lines[i], startX, y);
+                }
+
+                // 保存dataURL
+                const dataUrl = canvas.toDataURL('image/png');
+                setImageDataUrl(dataUrl);
+            }, [store, width, height]);
+
+            // 状态变化重新渲染
+            React.useEffect(() => {
+                renderImage();
+            }, [
+                store.text,
+                store.fontColor,
+                store.bgColor,
+                store.textAlign,
+                store.fontFamily,
+                store.lineHeight,
+                store.padding,
+                store.showBorder,
+                store.borderColor,
+                store.borderWidth,
+                store.baseWidth,
+                store.aspectRatio,
+                renderImage,
+            ]);
+
+            // 下载
+            const downloadImage = () => {
+                if (!imageDataUrl) return;
+                const link = document.createElement('a');
+                link.download = 'text-image.png';
+                link.href = imageDataUrl;
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+            };
+
+            // 复制
+            const copyImage = async () => {
+                if (!imageDataUrl) return;
+                try {
+                    const response = await fetch(imageDataUrl);
+                    const blob = await response.blob();
+                    await navigator.clipboard.write([
+                        new ClipboardItem({ [blob.type]: blob })
+                    ]);
+                    setCopied(true);
+                    setTimeout(() => setCopied(false), 2000);
+                } catch (err) {
+                    console.error('复制失败:', err);
+                }
+            };
+
+            // 快速预设配色
+            const presets = [
+                { label: '暗色', bg: '#0f172a', color: '#ffffff' },
+                { label: '亮色', bg: '#f8fafc', color: '#0f172a' },
+                { label: '霓虹', bg: '#1a0a2e', color: '#00ff88' },
+                { label: '暖阳', bg: '#2d1b0e', color: '#fbbf24' },
+                { label: '海洋', bg: '#0c1929', color: '#60a5fa' },
+                { label: '玫瑰', bg: '#1a0a0a', color: '#fb7185' },
+            ];
+
+            const applyPreset = (bg, color) => {
+                store.setBgColor(bg);
+                store.setFontColor(color);
+            };
+
+            // 比例选项
+            const ratios = [
+                { label: '1:1', value: '1:1' },
+                { label: '3:4', value: '3:4' },
+                { label: '4:3', value: '4:3' },
+                { label: '16:9', value: '16:9' },
+                { label: '9:16', value: '9:16' },
+            ];
+
+            // 字体选项
+            const fontOptions = [
+                { value: 'PingFang SC, Microsoft YaHei, sans-serif', label: '苹方 / 雅黑' },
+                { value: 'SimHei, sans-serif', label: '黑体' },
+                { value: 'KaiTi, serif', label: '楷体' },
+                { value: 'STSong, serif', label: '宋体' },
+                { value: 'Arial, sans-serif', label: 'Arial' },
+                { value: 'Georgia, serif', label: 'Georgia' },
+                { value: 'Courier New, monospace', label: 'Courier New' },
+                { value: 'Impact, sans-serif', label: 'Impact' },
+            ];
+
+            return (
+                <div className="h-screen flex flex-col bg-slate-950 text-slate-200 overflow-hidden">
+
+                    {/* ===== Header ===== */}
+                    <header className="flex items-center justify-between px-6 py-3 bg-slate-900/80 border-b border-slate-700/60 backdrop-blur-sm flex-shrink-0">
+                        <div className="flex items-center gap-3">
+                            <div className="p-1.5 bg-blue-500/20 rounded-lg text-blue-400">
+                                <Type size={20} />
+                            </div>
+                            <h1 className="text-lg font-semibold tracking-tight text-slate-100">Text to Image</h1>
+                            <span className="text-xs text-slate-500 hidden sm:inline">· 将文本渲染为图片</span>
+                        </div>
+                        <div className="flex items-center gap-3">
+                            <button
+                                onClick={store.reset}
+                                className="p-2 text-slate-400 hover:text-slate-200 hover:bg-slate-700/50 rounded-lg transition-all"
+                                title="重置默认"
+                            >
+                                <RefreshCw size={18} />
+                            </button>
+                            <span className="text-xs text-slate-500 font-mono hidden md:inline">
+                                {width}×{height}
+                            </span>
+                        </div>
+                    </header>
+
+                    {/* ===== 主体：左侧配置 + 右侧预览 ===== */}
+                    <div className="flex-1 flex flex-row overflow-hidden">
+
+                        {/* 左侧面板 */}
+                        <aside className="w-80 flex-shrink-0 bg-slate-900/50 border-r border-slate-700/60 overflow-y-auto p-4 space-y-4">
+                            {/* 文本区域 */}
+                            <div>
+                                <label className="block text-xs font-medium text-slate-400 mb-1">📝 文本内容</label>
+                                <textarea
+                                    value={store.text}
+                                    onChange={(e) => store.setText(e.target.value)}
+                                    className="w-full h-28 px-3 py-2 bg-slate-800/60 border border-slate-700/60 rounded-lg text-slate-200 text-sm placeholder:text-slate-500 focus:border-blue-500/60 focus:ring-2 focus:ring-blue-500/20 outline-none resize-none transition-all"
+                                    placeholder="输入要转换为图片的文本..."
+                                />
+                            </div>
+
+                            {/* 尺寸与比例 */}
+                            <div className="grid grid-cols-2 gap-3">
+                                <div>
+                                    <label className="block text-xs font-medium text-slate-400 mb-1">宽度 (px)</label>
+                                    <input
+                                        type="number"
+                                        min="200"
+                                        max="4000"
+                                        value={store.baseWidth}
+                                        onChange={(e) => store.setBaseWidth(Number(e.target.value))}
+                                        className="w-full px-3 py-2 bg-slate-800/60 border border-slate-700/60 rounded-lg text-slate-200 text-sm focus:border-blue-500/60 focus:ring-2 focus:ring-blue-500/20 outline-none transition-all"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-medium text-slate-400 mb-1">比例</label>
+                                    <div className="flex flex-wrap gap-1">
+                                        {ratios.map((r) => (
+                                            <button
+                                                key={r.value}
+                                                onClick={() => store.setAspectRatio(r.value)}
+                                                className={`px-2 py-1 text-xs rounded border transition-all ${store.aspectRatio === r.value ? 'bg-blue-600 border-blue-500 text-white' : 'bg-slate-800/50 border-slate-700/60 text-slate-400 hover:text-slate-200'}`}
+                                            >
+                                                {r.label}
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* 颜色 & 预设 */}
+                            <div>
+                                <label className="block text-xs font-medium text-slate-400 mb-1">🎨 配色</label>
+                                <div className="flex items-center gap-3 mb-2">
+                                    <div className="flex items-center gap-1.5">
+                                        <span className="text-xs text-slate-400">背景</span>
+                                        <input
+                                            type="color"
+                                            value={store.bgColor}
+                                            onChange={(e) => store.setBgColor(e.target.value)}
+                                            className="w-8 h-8 rounded-lg border border-slate-600"
+                                        />
+                                    </div>
+                                    <div className="flex items-center gap-1.5">
+                                        <span className="text-xs text-slate-400">字体</span>
+                                        <input
+                                            type="color"
+                                            value={store.fontColor}
+                                            onChange={(e) => store.setFontColor(e.target.value)}
+                                            className="w-8 h-8 rounded-lg border border-slate-600"
+                                        />
+                                    </div>
+                                    <div className="flex-1 flex justify-end gap-1">
+                                        {presets.slice(0, 4).map((p, i) => (
+                                            <button
+                                                key={i}
+                                                onClick={() => applyPreset(p.bg, p.color)}
+                                                className="w-6 h-6 rounded-full border border-slate-600 transition hover:scale-110"
+                                                style={{ backgroundColor: p.bg }}
+                                                title={p.label}
+                                            />
+                                        ))}
+                                    </div>
+                                </div>
+                                <div className="flex flex-wrap gap-1">
+                                    {presets.slice(4).map((p, i) => (
+                                        <button
+                                            key={i}
+                                            onClick={() => applyPreset(p.bg, p.color)}
+                                            className="px-2 py-0.5 text-xs rounded border border-slate-700/60 hover:border-blue-500/50 transition"
+                                            style={{ backgroundColor: p.bg, color: p.color }}
+                                        >
+                                            {p.label}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+
+                            {/* 字体 & 对齐 */}
+                            <div className="grid grid-cols-2 gap-3">
+                                <div>
+                                    <label className="block text-xs font-medium text-slate-400 mb-1">字体</label>
+                                    <select
+                                        value={store.fontFamily}
+                                        onChange={(e) => store.setFontFamily(e.target.value)}
+                                        className="w-full px-3 py-2 bg-slate-800/60 border border-slate-700/60 rounded-lg text-slate-200 text-sm focus:border-blue-500/60 focus:ring-2 focus:ring-blue-500/20 outline-none transition-all"
+                                    >
+                                        {fontOptions.map((f) => (
+                                            <option key={f.value} value={f.value}>{f.label}</option>
+                                        ))}
+                                    </select>
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-medium text-slate-400 mb-1">对齐</label>
+                                    <div className="flex gap-1">
+                                        {[
+                                            { value: 'left', icon: AlignLeft },
+                                            { value: 'center', icon: AlignCenter },
+                                            { value: 'right', icon: AlignRight },
+                                        ].map(({ value, icon: Icon }) => (
+                                            <button
+                                                key={value}
+                                                onClick={() => store.setTextAlign(value)}
+                                                className={`flex-1 flex items-center justify-center py-2 rounded-lg border transition-all ${store.textAlign === value ? 'bg-blue-500/20 border-blue-500/50 text-blue-400' : 'bg-slate-800/50 border-slate-700/60 text-slate-500 hover:text-slate-300'}`}
+                                            >
+                                                <Icon size={16} />
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* 行高 & 边距 */}
+                            <div className="grid grid-cols-2 gap-3">
+                                <div>
+                                    <label className="block text-xs font-medium text-slate-400 mb-1">行高</label>
+                                    <div className="flex items-center gap-2">
+                                        <input
+                                            type="range"
+                                            min="1.0"
+                                            max="3.0"
+                                            step="0.1"
+                                            value={store.lineHeight}
+                                            onChange={(e) => store.setLineHeight(Number(e.target.value))}
+                                            className="flex-1"
+                                        />
+                                        <span className="text-sm font-mono text-slate-300 w-8">{store.lineHeight.toFixed(1)}</span>
+                                    </div>
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-medium text-slate-400 mb-1">边距 (px)</label>
+                                    <div className="flex items-center gap-2">
+                                        <input
+                                            type="range"
+                                            min="10"
+                                            max="120"
+                                            value={store.padding}
+                                            onChange={(e) => store.setPadding(Number(e.target.value))}
+                                            className="flex-1"
+                                        />
+                                        <span className="text-sm font-mono text-slate-300 w-8">{store.padding}</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* 边框 */}
+                            <div className="flex items-center gap-3">
+                                <label className="text-xs font-medium text-slate-400">边框</label>
+                                <button
+                                    onClick={() => store.setShowBorder(!store.showBorder)}
+                                    className={`p-1.5 rounded-lg border transition-all ${store.showBorder ? 'bg-blue-500/20 border-blue-500/50 text-blue-400' : 'bg-slate-800/50 border-slate-700/60 text-slate-500'}`}
+                                >
+                                    <Square size={16} />
+                                </button>
+                                {store.showBorder && (
+                                    <>
+                                        <input
+                                            type="color"
+                                            value={store.borderColor}
+                                            onChange={(e) => store.setBorderColor(e.target.value)}
+                                            className="w-7 h-7 rounded-lg border border-slate-600"
+                                        />
+                                        <input
+                                            type="range"
+                                            min="1"
+                                            max="8"
+                                            value={store.borderWidth}
+                                            onChange={(e) => store.setBorderWidth(Number(e.target.value))}
+                                            className="w-16"
+                                        />
+                                        <span className="text-xs text-slate-500 font-mono">{store.borderWidth}px</span>
+                                    </>
+                                )}
+                            </div>
+
+                            {/* 底部信息 */}
+                            <div className="pt-3 border-t border-slate-700/60 text-xs text-slate-500 flex justify-between">
+                                <span>字号自动适配</span>
+                                <span>行数: {store.text.split('\n').length}</span>
+                            </div>
+                        </aside>
+
+                        {/* 右侧预览区 */}
+                        <main className="flex-1 bg-slate-900/30 flex flex-col overflow-hidden">
+                            {/* 预览工具栏 */}
+                            <div className="flex items-center justify-between px-4 py-2 bg-slate-900/40 border-b border-slate-700/60 flex-shrink-0">
+                                <div className="flex items-center gap-3 text-sm text-slate-400">
+                                    <ImageIcon size={16} />
+                                    <span>预览</span>
+                                    <span className="font-mono text-xs">{width}×{height}</span>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                    <button
+                                        onClick={copyImage}
+                                        className="flex items-center gap-1.5 px-3 py-1 text-xs bg-slate-700/50 hover:bg-slate-700 text-slate-300 hover:text-slate-100 rounded-lg border border-slate-600/50 transition-all"
+                                        disabled={!imageDataUrl}
+                                    >
+                                        {copied ? <Check size={14} className="text-green-400" /> : <Copy size={14} />}
+                                        {copied ? '已复制' : '复制'}
+                                    </button>
+                                    <button
+                                        onClick={downloadImage}
+                                        className="flex items-center gap-1.5 px-4 py-1 text-xs bg-blue-600 hover:bg-blue-500 text-white rounded-lg shadow-lg shadow-blue-800/30 transition-all active:scale-95"
+                                        disabled={!imageDataUrl}
+                                    >
+                                        <Download size={14} />
+                                        下载 PNG
+                                    </button>
+                                </div>
+                            </div>
+
+                            {/* 画布预览 */}
+                            <div className="flex-1 flex items-center justify-center p-4 overflow-auto bg-slate-950/50">
+                                {imageDataUrl ? (
+                                    <img
+                                        src={imageDataUrl}
+                                        alt="生成的文本图片"
+                                        className="preview-canvas fade-in"
+                                        style={{
+                                            maxWidth: '100%',
+                                            maxHeight: '100%',
+                                            objectFit: 'contain',
+                                        }}
+                                    />
+                                ) : (
+                                    <div className="text-slate-500 flex flex-col items-center gap-2">
+                                        <Type size={40} className="opacity-30" />
+                                        <span className="text-sm">正在生成预览...</span>
+                                    </div>
+                                )}
+                                <canvas ref={canvasRef} style={{ display: 'none' }} />
+                            </div>
+
+                            {/* 底部状态栏 */}
+                            <div className="flex items-center justify-between px-4 py-1.5 bg-slate-900/40 border-t border-slate-700/60 text-xs text-slate-500 flex-shrink-0">
+                                <span>💡 字体大小自动适应画布</span>
+                                <span className="font-mono">
+                                    {imageDataUrl ? (imageDataUrl.length / 1024).toFixed(1) : 0} KB · PNG
+                                </span>
+                            </div>
+                        </main>
+                    </div>
+                </div>
+            );
+        }
+
+        // ============ 渲染 ============
+        createRoot(document.getElementById("root")).render(<App />);
+    </script>
+</body>
+
+</html>
