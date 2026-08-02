@@ -1,0 +1,1230 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <script type="importmap">
+    {
+      "imports": {
+        "react": "https://esm.sh/react@19.2.4",
+        "react/jsx-runtime": "https://esm.sh/react@19.2.4/jsx-runtime",
+        "react-dom/client": "https://esm.sh/react-dom@19.2.4/client",
+        "lucide-react": "https://esm.sh/lucide-react?external=react",
+        "zustand": "https://esm.sh/zustand?external=react",
+        "zustand/middleware": "https://esm.sh/zustand@4.5.4/middleware?external=react"
+      }
+    }
+  </script>
+  <script src="https://cdn.jsdelivr.net/npm/@babel/standalone@latest/babel.min.js">
+  </script>
+  <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4">
+  </script>
+</head>
+
+<body class="dark">
+  <div id="root"></div>
+
+  <script type="text/babel" data-type="module">
+    import * as React from "react";
+    window.React = React;
+  </script>
+
+  <script type="text/babel" data-type="module">
+    import { createRoot } from "react-dom/client"
+    import { create } from "zustand"
+    import { persist } from "zustand/middleware"
+    import { Copy, Check, Sparkles, FileJson, FileText, Shuffle, Save, Trash2, ChevronDown, ChevronUp, Filter, Plus } from "lucide-react"
+
+    // ===================== 底层捏脸系统 =====================
+    // ----- 数据定义 -----
+    const GENDER_OPTIONS = [
+      { value: 'female', label: '女性', gender: 'both' },
+      { value: 'male', label: '男性', gender: 'both' },
+      { value: 'neutral', label: '中性', gender: 'both' },
+      { value: 'female_neutral', label: '中性（生理性别女）', gender: 'both' },
+      { value: 'male_neutral', label: '中性（生理性别男）', gender: 'both' }
+    ]
+
+    const isNeutralGender = (gender) => ['neutral', 'female_neutral', 'male_neutral'].includes(gender)
+
+    const buildOptions = (labels, gender = 'both') => labels.map(label => ({ label, gender }))
+
+    const AGE_OPTIONS = buildOptions(['18–22', '23–28', '29–35', '36–45', '46–60', '60+'])
+
+    // 区域与地区细分的映射关系
+    const REGION_MAP = {
+      '不特别指定': null, // null 表示显示全部
+      '东亚地区': ['不特别指定', '中国大陆', '港澳地区', '台湾地区', '日本', '韩国', '蒙古'],
+      '东南亚地区': ['不特别指定', '越南', '泰国', '菲律宾', '印度尼西亚', '马来西亚', '新加坡'],
+      '南亚地区': ['不特别指定', '印度', '巴基斯坦', '孟加拉国', '斯里兰卡', '尼泊尔'],
+      '西亚地区': ['不特别指定', '阿拉伯半岛', '黎凡特地区', '伊朗', '土耳其', '北非'],
+      '欧洲地区': ['不特别指定', '北欧', '西欧', '南欧', '中欧', '东欧'],
+      '撒哈拉以南非洲地区': ['不特别指定', '西非', '东非', '中非', '南部非洲', '非洲之角'],
+      '拉丁美洲地区': ['不特别指定', '墨西哥', '加勒比地区', '安第斯地区', '巴西', '南锥体地区'],
+      '北美地区': ['不特别指定', '美国', '太平洋岛国'], // 根据现有列表调整
+      '大洋洲地区': ['不特别指定', '澳大利亚', '太平洋岛国']
+    }
+
+    // 所有地区细分（用于“不特别指定”时显示全部）
+    const ALL_REGION_DETAILS = ['不特别指定', '中国大陆', '港澳地区', '台湾地区', '日本', '韩国', '蒙古', '越南', '泰国', '菲律宾', '印度尼西亚', '马来西亚', '新加坡', '印度', '巴基斯坦', '孟加拉国', '斯里兰卡', '尼泊尔', '阿拉伯半岛', '黎凡特地区', '伊朗', '土耳其', '北非', '北欧', '西欧', '南欧', '中欧', '东欧', '西非', '东非', '中非', '南部非洲', '非洲之角', '墨西哥', '加勒比地区', '安第斯地区', '巴西', '南锥体地区', '美国', '澳大利亚', '太平洋岛国']
+
+    const REGION_OPTIONS = buildOptions(Object.keys(REGION_MAP))
+    const REGION_DETAIL_OPTIONS = buildOptions(ALL_REGION_DETAILS)
+
+    // 肤色、发色预设与标签
+    const SKIN_TONE_PRESETS = ['#f5d0b8', '#f0c4a8', '#e8b89a', '#dba88a', '#c99a7e', '#b58972', '#a6785e', '#8d6b56', '#7a5d4a',
+      '#f7dcc8', '#ecc4b0', '#dbb098', '#c7977a', '#b07d62', '#9a6b51', '#6b4c2a', '#4a2e1a'
+    ]
+    const SKIN_TONE_LABELS = ['白皙', '自然', '小麦', '暖杏', '蜜色', '琥珀', '古铜', '深褐', '可可',
+      '粉白', '奶油', '杏仁', '焦糖', '肉桂', '摩卡', '咖啡', '黑巧'
+    ]
+
+    const HAIR_COLOR_PRESETS = ['#1a1a1a', '#3e2c1b', '#6b4c2a', '#8b6b3d', '#a8845a', '#c9a87c', '#e8d5b5',
+      '#c0c0c0', '#ff6b6b', '#ffb347', '#ffd93d', '#8b5a2b', '#a0522d', '#d2b48c', '#4a4a4a', '#7b7b7b',
+      '#4f4f4f', '#2c2c2c'
+    ]
+    const HAIR_COLOR_LABELS = ['墨黑', '深棕', '栗色', '金棕', '亚麻', '浅金', '铂金',
+      '银灰', '绯红', '橙黄', '明黄', '红褐', '赤铜', '浅褐', '深灰', '铁灰',
+      '烟灰', '炭黑'
+    ]
+
+    const SKIN_TEXTURE_OPTIONS = buildOptions(['原生肌理', '通透清润', '微雀斑', '健康光泽', '成熟肌理', '干净哑光'])
+
+    const MAKEUP_OPTIONS = [
+      { label: '伪素颜', gender: 'both' },
+      { label: '清透水光', gender: 'female' },
+      { label: '冷感哑光', gender: 'both' },
+      { label: '明艳红唇', gender: 'female' },
+      { label: '无妆原生', gender: 'both' },
+      { label: '清透底妆', gender: 'both' },
+      { label: '自然修容', gender: 'both' },
+      { label: '硬朗修容', gender: 'male' },
+      { label: '烟熏眼妆', gender: 'female' },
+      { label: '自然裸妆（男）', gender: 'male' }
+    ]
+    const CLOTHING_OPTIONS = [
+      { label: '白色基础上衣', gender: 'both' },
+      { label: '黑色基础上衣', gender: 'both' },
+      { label: '简约白衬衫', gender: 'both' },
+      { label: '低饱和针织', gender: 'both' },
+      { label: '休闲西装', gender: 'male' },
+      { label: '皮质夹克', gender: 'male' },
+      { label: '高腰裙', gender: 'female' },
+      { label: '吊带连衣裙', gender: 'female' }
+    ]
+    const ACCESSORIES_OPTIONS = buildOptions(['小银耳饰', '无配饰', '珍珠耳钉', '金色耳圈', '细框眼镜', '简约腕表', '小耳钉'], 'both')
+
+    const FACE_SHAPE_OPTIONS = buildOptions(['柔和鹅蛋脸', '流畅瓜子脸', '利落方脸', '幼态圆脸', '高颊长脸', '宽额菱形脸', '窄长鹅蛋脸',
+      '高颧骨菱形脸', '立体方圆脸', '清朗长脸', '硬朗方脸', '少年圆脸', '立体鹅蛋脸', '窄额菱形脸'
+    ], 'both')
+    const FACE_STYLE_OPTIONS = buildOptions(['柔和自然', '浓颜立体', '清冷疏离', '英气利落', '古典温婉', '可爱幼态', '高级骨相',
+      '冷感高定', '中性时装感', '清朗自然', '立体硬朗', '少年感', '成熟绅士'
+    ], 'both')
+    const BONE_STRUCTURE_OPTIONS = buildOptions(['自然柔和', '高颧骨留白', '清晰下颌', '眉骨眼窝层次', '紧致短中庭'], 'both')
+    const NOSE_OPTIONS = buildOptions(['自然直鼻', '精致小翘鼻', '立体高鼻梁', '柔和圆鼻头', '英气直鼻', '窄直高鼻', '高挺鼻梁', '圆润鼻头'], 'both')
+    const LIPS_OPTIONS = buildOptions(['自然微笑唇', '清透薄唇', '柔润嘟嘟唇', '复古M唇', '中性直线唇', '立体薄唇',
+      '中性宽唇', '自然薄唇', '柔和唇形', '清晰唇峰'
+    ], 'both')
+    const EYES_OPTIONS = buildOptions(['清亮杏眼', '细长凤眼', '微挑猫眼', '深邃大眼', '内双垂眼', '单眼皮',
+      '深邃平行眼', '轻微深眼窝', '清朗双眼皮', '狭长内双', '深邃眼型', '锐利丹凤眼', '自然单眼皮'
+    ], 'both')
+    const EYEBROW_OPTIONS = buildOptions(['自然平眉', '柔和弯眉', '英气挑眉', '野生眉', '细长柳叶眉', '高定直眉', '自然浓眉', '平直剑眉', '清朗直眉'],
+      'both')
+    const EYE_EXPRESSION_OPTIONS = buildOptions(['温柔克制', '清冷坚定', '灵动好奇', '慵懒放空', '警觉锐利', '低眉沉思', '沉静坚定', '清冷克制',
+      '温和松弛', '少年灵动'
+    ], 'both')
+
+    const BODY_TYPE_OPTIONS = [
+      { label: '高挑纤细', gender: 'female' },
+      { label: '匀称健康', gender: 'both' },
+      { label: '小骨架纤薄', gender: 'female' },
+      { label: '修长有力', gender: 'both' },
+      { label: '丰润柔和', gender: 'female' },
+      { label: '肩背挺拔', gender: 'male' },
+      { label: '纤细修长', gender: 'both' },
+      { label: '肌肉健壮', gender: 'male' },
+      { label: '魁梧厚重', gender: 'male' }
+    ]
+
+    const HAIRSTYLE_OPTIONS = [
+      { label: '法式层次锁骨发', gender: 'female' },
+      { label: '水波纹流苏波波', gender: 'female' },
+      { label: '轻狼尾层次发', gender: 'both' },
+      { label: '水母层次发', gender: 'female' },
+      { label: '高颅顶半扎发', gender: 'female' },
+      { label: '八字刘海低马尾', gender: 'female' },
+      { label: '韩系大波浪', gender: 'female' },
+      { label: '低束丸子头', gender: 'female' },
+      { label: '轻公主切', gender: 'female' },
+      { label: '日系微分碎盖', gender: 'male' },
+      { label: '韩系逗号刘海', gender: 'male' },
+      { label: '碎层抓感短发', gender: 'male' },
+      { label: '轻卷中分', gender: 'both' },
+      { label: '微卷狼尾', gender: 'both' },
+      { label: '清爽前刺', gender: 'male' },
+      { label: 'Clean极简短发', gender: 'male' },
+      { label: '侧分纹理短发', gender: 'male' },
+      { label: '慵懒中长发', gender: 'both' },
+      { label: '油头背头', gender: 'male' },
+      { label: '脏辫', gender: 'both' }
+    ]
+
+    const EXPRESSION_OPTIONS = buildOptions(['轻微浅笑', '恬静放空', '平静正视', '若有所思', '自信微笑', '沉静思考', '自信克制'], 'both')
+    const PHOTOGRAPHY_OPTIONS = buildOptions(['白底定妆', '浅灰影棚', '米白柔光', '正面半身', '轻转十五度', '证件式特写'], 'both')
+
+    // ----- 字段定义（集中管理） -----
+    const FIELD_DEFS = {
+      gender: { label: '性别表达', options: GENDER_OPTIONS, isGender: true, type: 'select' },
+      age: { label: '年龄', options: AGE_OPTIONS, type: 'select' },
+      region: { label: '区域', options: REGION_OPTIONS, type: 'select' },
+      regionDetail: { label: '地区细分（可选）', options: REGION_DETAIL_OPTIONS, type: 'select', dependsOn: 'region' },
+      skinTone: { label: '肤色', presets: SKIN_TONE_PRESETS, presetLabels: SKIN_TONE_LABELS, type: 'color' },
+      skinTexture: { label: '皮肤质感', options: SKIN_TEXTURE_OPTIONS, type: 'select' },
+      makeup: { label: '妆容', options: MAKEUP_OPTIONS, type: 'select' },
+      clothing: { label: '服装', options: CLOTHING_OPTIONS, type: 'select' },
+      accessories: { label: '配饰', options: ACCESSORIES_OPTIONS, type: 'select' },
+      faceShape: { label: '脸型', options: FACE_SHAPE_OPTIONS, type: 'select' },
+      faceStyle: { label: '面部风格', options: FACE_STYLE_OPTIONS, type: 'select' },
+      boneStructure: { label: '骨相结构（可选）', options: BONE_STRUCTURE_OPTIONS, type: 'select' },
+      nose: { label: '鼻型', options: NOSE_OPTIONS, type: 'select' },
+      lips: { label: '唇形', options: LIPS_OPTIONS, type: 'select' },
+      eyes: { label: '眼型', options: EYES_OPTIONS, type: 'select' },
+      eyebrow: { label: '眉形', options: EYEBROW_OPTIONS, type: 'select' },
+      eyeExpression: { label: '眼神', options: EYE_EXPRESSION_OPTIONS, type: 'select' },
+      bodyType: { label: '体型', options: BODY_TYPE_OPTIONS, type: 'select' },
+      hairstyle: { label: '发型', options: HAIRSTYLE_OPTIONS, type: 'select' },
+      hairColor: { label: '发色', presets: HAIR_COLOR_PRESETS, presetLabels: HAIR_COLOR_LABELS, type: 'color' },
+      expression: { label: '表情状态', options: EXPRESSION_OPTIONS, type: 'select' },
+      photography: { label: '摄影方案', options: PHOTOGRAPHY_OPTIONS, type: 'select' }
+    }
+
+    const ALL_KEYS = Object.keys(FIELD_DEFS)
+
+    // 默认值（预设的第一个）
+    const defaultValues = {}
+    ALL_KEYS.forEach(key => {
+      const def = FIELD_DEFS[key]
+      if (def.type === 'color') {
+        defaultValues[key] = { type: 'option', value: def.presets[0] }
+      } else if (def.isGender) {
+        defaultValues[key] = { type: 'option', value: def.options[0].value }
+      } else {
+        defaultValues[key] = { type: 'option', value: def.options[0].label }
+      }
+    })
+
+    // ----- 辅助函数 -----
+    const getDisplayValue = (v) => {
+      if (!v) return ''
+      if (typeof v === 'string') return v
+      return v.value || ''
+    }
+
+    const isCustomValue = (v) => v && v.type === 'custom'
+
+    // ----- 区域联动辅助 -----
+    const getRegionDetailSubset = (regionValue) => {
+      if (!regionValue || regionValue === '不特别指定') return null // null 表示全部
+      const subset = REGION_MAP[regionValue]
+      return subset || null
+    }
+
+    // ----- 获取字段所有可用选项（预设 + 自定义，并处理联动） -----
+    const getAvailableOptions = (key, state) => {
+      const def = FIELD_DEFS[key]
+      if (!def) return []
+      const result = []
+      const customList = state.customValues[key] || []
+      const currentGender = getDisplayValue(state.values.gender) || 'female'
+      const filter = state.filterByGender
+      const currentRegion = getDisplayValue(state.values.region) || '不特别指定'
+
+      // 处理区域联动（仅针对 regionDetail）
+      if (key === 'regionDetail') {
+        const subset = getRegionDetailSubset(currentRegion)
+        let detailOpts = def.options
+        if (subset) {
+          // 过滤出在 subset 中的选项
+          detailOpts = def.options.filter(opt => subset.includes(opt.label))
+        } else {
+          // 全部展示
+          detailOpts = def.options
+        }
+        // 添加预设选项（忽略性别筛选，地区细分不涉及性别）
+        detailOpts.forEach(opt => {
+          result.push({ value: opt.label, type: 'option', label: opt.label })
+        })
+        // 添加自定义值
+        customList.forEach(text => {
+          // 如果自定义值不在子集中，也要显示，但不应该被联动过滤掉，所以依然添加
+          result.push({ value: text, type: 'custom', label: text })
+        })
+        return result
+      }
+
+      // 颜色字段
+      if (def.type === 'color') {
+        const labels = def.presetLabels || def.presets.map((_, i) => `颜色${i + 1}`)
+        def.presets.forEach((p, idx) => {
+          result.push({ value: p, type: 'option', label: labels[idx] || p })
+        })
+        customList.forEach(text => {
+          result.push({ value: text, type: 'custom', label: text })
+        })
+        return result
+      }
+
+      // 其他 select 字段（含性别）
+      let opts = def.options
+      if (!def.isGender && filter && !isNeutralGender(currentGender)) {
+        opts = opts.filter(opt => opt.gender === 'both' || opt.gender === currentGender)
+      }
+      opts.forEach(opt => {
+        const val = def.isGender ? opt.value : opt.label
+        result.push({ value: val, type: 'option', label: def.isGender ? opt.label : opt.label, gender: opt.gender })
+      })
+      customList.forEach(text => {
+        result.push({ value: text, type: 'custom', label: text })
+      })
+      return result
+    }
+
+    // 根据性别调整字段值（预设值）
+    const adaptValuesToGender = (values, gender, filterEnabled) => {
+      if (!filterEnabled) return { ...values }
+      if (isNeutralGender(gender)) return { ...values }
+      const newValues = { ...values }
+      ALL_KEYS.forEach(key => {
+        const def = FIELD_DEFS[key]
+        if (def.isGender || def.type === 'color' || key === 'region' || key === 'regionDetail') return // 颜色、区域不调整
+        const current = values[key]
+        if (!current) return
+        if (isCustomValue(current)) return
+        const currentLabel = current.value
+        const options = def.options
+        const valid = options.some(opt => opt.label === currentLabel && (opt.gender === 'both' || opt.gender === gender))
+        if (!valid) {
+          const fallback = options.find(opt => opt.gender === 'both' || opt.gender === gender)
+          newValues[key] = fallback ? { type: 'option', value: fallback.label } : { type: 'option', value: options[0].label }
+        }
+      })
+      return newValues
+    }
+
+    // 根据区域调整地区细分
+    const adaptRegionDetail = (values) => {
+      const region = getDisplayValue(values.region) || '不特别指定'
+      const currentDetail = getDisplayValue(values.regionDetail)
+      const subset = getRegionDetailSubset(region)
+      if (subset) {
+        // 如果当前 detail 不在子集中，则设置为第一个（'不特别指定'）
+        if (!subset.includes(currentDetail) && currentDetail !== '不特别指定') {
+          // 找第一个在子集中的，优先 '不特别指定'
+          const first = subset.includes('不特别指定') ? '不特别指定' : subset[0]
+          values.regionDetail = { type: 'option', value: first }
+        }
+      }
+      // 如果是 '不特别指定'，则保留当前值（全部显示）
+      return values
+    }
+
+    // ===================== Store (底层系统) =====================
+    const useStore = create(
+      persist(
+        (set, get) => ({
+          values: { ...defaultValues },
+          customValues: {},
+          customConfigs: [],
+          filterByGender: true,
+
+          // ---- 底层接口 ----
+          getAvailableOptions: (key) => getAvailableOptions(key, get()),
+
+          // 选择值（预设或自定义）
+          selectValue: (key, value) => {
+            const state = get()
+            const def = FIELD_DEFS[key]
+            const allOpts = state.getAvailableOptions(key)
+            const found = allOpts.find(o => o.value === value)
+            if (!found) return
+            const newVal = { type: found.type, value: value }
+
+            // 如果是区域改变，需要联动调整地区细分
+            let newValues = { ...state.values, [key]: newVal }
+            if (key === 'region') {
+              // 调整地区细分
+              newValues = adaptRegionDetail(newValues)
+            }
+
+            // 如果修改的是性别且筛选开启，调整其他字段
+            if (def.isGender && state.filterByGender) {
+              const gender = value
+              if (!isNeutralGender(gender)) {
+                newValues = adaptValuesToGender(newValues, gender, true)
+              }
+            }
+
+            set({ values: newValues })
+          },
+
+          // 添加自定义值
+          addCustomValue: (key, text) => {
+            const trimmed = text.trim()
+            if (!trimmed) return
+            set(state => {
+              const currentList = state.customValues[key] || []
+              let newList = currentList
+              if (!currentList.includes(trimmed)) {
+                newList = [...currentList, trimmed]
+              }
+              const newValues = { ...state.values, [key]: { type: 'custom', value: trimmed } }
+              // 如果是区域关联字段，可能联动
+              let finalValues = newValues
+              if (key === 'region') {
+                finalValues = adaptRegionDetail(finalValues)
+              }
+              return {
+                customValues: { ...state.customValues, [key]: newList },
+                values: finalValues
+              }
+            })
+          },
+
+          // 删除自定义值
+          removeCustomValue: (key, text) => {
+            set(state => {
+              const currentList = state.customValues[key] || []
+              const newList = currentList.filter(v => v !== text)
+              const newCustomValues = { ...state.customValues, [key]: newList }
+              let newValues = { ...state.values }
+              const current = state.values[key]
+              if (isCustomValue(current) && current.value === text) {
+                const def = FIELD_DEFS[key]
+                if (def) {
+                  const firstOpt = state.getAvailableOptions(key).find(o => o.type === 'option')
+                  if (firstOpt) {
+                    newValues[key] = { type: 'option', value: firstOpt.value }
+                  } else {
+                    if (def.type === 'color') newValues[key] = { type: 'option', value: def.presets[0] }
+                    else newValues[key] = { type: 'option', value: def.options[0].label }
+                  }
+                }
+              }
+              return {
+                customValues: newCustomValues,
+                values: newValues
+              }
+            })
+          },
+
+          // 随机
+          randomize: () => {
+            const state = get()
+            const filter = state.filterByGender
+
+            // 随机性别
+            const genderDef = FIELD_DEFS['gender']
+            let newGender = 'female'
+            if (genderDef) {
+              const genderOpts = genderDef.options
+              const chosen = genderOpts[Math.floor(Math.random() * genderOpts.length)]
+              newGender = chosen.value
+            }
+
+            const newValues = {}
+            ALL_KEYS.forEach(key => {
+              const def = FIELD_DEFS[key]
+              if (key === 'gender') {
+                newValues[key] = { type: 'option', value: newGender }
+                return
+              }
+              let opts = state.getAvailableOptions(key)
+              // 如果是地区细分，且区域已指定，可能已被过滤，但随机时我们希望从全部中选，还是从过滤后的选？应该从过滤后的选，以保持一致性
+              // 但如果过滤后为空，则回退到所有预设
+              if (key === 'regionDetail') {
+                // 对于 regionDetail，我们基于当前区域过滤，但为了随机，可以临时获取完整列表，但这里直接用 getAvailableOptions
+                // 如果 opts 为空，则使用全量预设
+                if (opts.length === 0) {
+                  const allOpts = []
+                  def.options.forEach(opt => allOpts.push({ value: opt.label, type: 'option', label: opt.label }))
+                  opts = allOpts
+                }
+              } else if (filter && !def.isGender && def.type !== 'color' && key !== 'region' && key !== 'regionDetail') {
+                // 性别筛选只影响 select 字段（非性别、非颜色、非区域）
+                let filteredOpts = opts.filter(o => o.type === 'option' && (o.gender === 'both' || o.gender === newGender))
+                if (filteredOpts.length === 0) filteredOpts = opts.filter(o => o.type === 'option')
+                opts = filteredOpts
+              }
+              if (opts.length === 0) {
+                // 兜底
+                if (def.type === 'color') {
+                  opts = def.presets.map((p, idx) => ({ value: p, type: 'option', label: def.presetLabels?.[idx] || p }))
+                } else {
+                  opts = def.options.map(opt => ({
+                    value: def.isGender ? opt.value : opt.label, type: 'option', label: def
+                      .isGender ? opt.label : opt.label
+                  }))
+                }
+              }
+              const chosen = opts[Math.floor(Math.random() * opts.length)]
+              newValues[key] = { type: chosen.type, value: chosen.value }
+            })
+
+            // 如果筛选开启，确保其他字段符合性别（自定义值不受影响）
+            let finalValues = newValues
+            if (filter && !isNeutralGender(newGender)) {
+              finalValues = adaptValuesToGender(newValues, newGender, true)
+            }
+            // 联动调整地区细分
+            finalValues = adaptRegionDetail(finalValues)
+            set({ values: finalValues })
+          },
+
+          // 切换性别筛选
+          toggleFilter: () => set(state => {
+            const newFilter = !state.filterByGender
+            let newValues = { ...state.values }
+            if (newFilter) {
+              const genderObj = state.values.gender
+              const gender = genderObj ? getDisplayValue(genderObj) : 'female'
+              if (!isNeutralGender(gender)) {
+                newValues = adaptValuesToGender(newValues, gender, true)
+              }
+            }
+            return { filterByGender: newFilter, values: newValues }
+          }),
+
+          // 加载配置
+          loadConfig: (configValues) => {
+            set(state => {
+              let values = { ...configValues }
+              ALL_KEYS.forEach(key => {
+                const v = values[key]
+                if (v && typeof v === 'string') {
+                  values[key] = { type: 'option', value: v }
+                }
+              })
+              // 确保联动
+              values = adaptRegionDetail(values)
+              if (state.filterByGender) {
+                const genderObj = values.gender
+                const gender = genderObj ? getDisplayValue(genderObj) : 'female'
+                if (!isNeutralGender(gender)) {
+                  values = adaptValuesToGender(values, gender, true)
+                }
+              }
+              return { values }
+            })
+          },
+
+          // 保存自定义配置
+          saveCustomConfig: (name) => {
+            const currentValues = get().values
+            const newConfig = {
+              id: 'custom-' + Date.now(),
+              name: name,
+              values: { ...currentValues }
+            }
+            set(state => ({
+              customConfigs: [...state.customConfigs, newConfig]
+            }))
+          },
+
+          deleteCustomConfig: (id) => {
+            set(state => ({
+              customConfigs: state.customConfigs.filter(c => c.id !== id)
+            }))
+          },
+
+          resetToDefault: () => {
+            set(state => {
+              let values = { ...defaultValues }
+              values = adaptRegionDetail(values)
+              if (state.filterByGender) {
+                const genderObj = values.gender
+                const gender = genderObj ? getDisplayValue(genderObj) : 'female'
+                if (!isNeutralGender(gender)) {
+                  values = adaptValuesToGender(values, gender, true)
+                }
+              }
+              return { values }
+            })
+          }
+        }),
+        {
+          name: 'face-tool-storage',
+          partialize: (state) => ({
+            values: state.values,
+            customValues: state.customValues,
+            customConfigs: state.customConfigs,
+            filterByGender: state.filterByGender
+          })
+        }
+      )
+    )
+
+    // ===================== 渲染层（组件） =====================
+    const TABS = [
+      { id: 'base', label: '基础', keys: ['gender', 'age', 'region', 'regionDetail', 'skinTone', 'skinTexture'] },
+      { id: 'makeup', label: '妆容与穿搭', keys: ['makeup', 'clothing', 'accessories'] },
+      {
+        id: 'facial', label: '五官', keys: ['faceShape', 'faceStyle', 'boneStructure', 'nose', 'lips', 'eyes', 'eyebrow',
+          'eyeExpression'
+        ]
+      },
+      { id: 'body', label: '体型', keys: ['bodyType'] },
+      { id: 'hair', label: '发型', keys: ['hairstyle', 'hairColor'] },
+      { id: 'style', label: '风格', keys: ['expression', 'photography'] }
+    ]
+
+    const BUILTIN_CONFIGS = [{
+      id: 'builtin-1',
+      name: '清新少女',
+      values: {
+        gender: { type: 'option', value: 'female' },
+        age: { type: 'option', value: '18–22' },
+        region: { type: 'option', value: '东亚地区' },
+        regionDetail: { type: 'option', value: '中国大陆' },
+        skinTone: { type: 'option', value: '#f5d0b8' },
+        skinTexture: { type: 'option', value: '通透清润' },
+        makeup: { type: 'option', value: '伪素颜' },
+        clothing: { type: 'option', value: '白色基础上衣' },
+        accessories: { type: 'option', value: '小银耳饰' },
+        faceShape: { type: 'option', value: '柔和鹅蛋脸' },
+        faceStyle: { type: 'option', value: '可爱幼态' },
+        boneStructure: { type: 'option', value: '自然柔和' },
+        nose: { type: 'option', value: '精致小翘鼻' },
+        lips: { type: 'option', value: '自然微笑唇' },
+        eyes: { type: 'option', value: '清亮杏眼' },
+        eyebrow: { type: 'option', value: '柔和弯眉' },
+        eyeExpression: { type: 'option', value: '灵动好奇' },
+        bodyType: { type: 'option', value: '小骨架纤薄' },
+        hairstyle: { type: 'option', value: '高颅顶半扎发' },
+        hairColor: { type: 'option', value: '#3e2c1b' },
+        expression: { type: 'option', value: '轻微浅笑' },
+        photography: { type: 'option', value: '米白柔光' }
+      }
+    }, {
+      id: 'builtin-2',
+      name: '冷艳御姐',
+      values: {
+        gender: { type: 'option', value: 'female' },
+        age: { type: 'option', value: '29–35' },
+        region: { type: 'option', value: '东亚地区' },
+        regionDetail: { type: 'option', value: '韩国' },
+        skinTone: { type: 'option', value: '#e8b89a' },
+        skinTexture: { type: 'option', value: '干净哑光' },
+        makeup: { type: 'option', value: '冷感哑光' },
+        clothing: { type: 'option', value: '黑色基础上衣' },
+        accessories: { type: 'option', value: '金色耳圈' },
+        faceShape: { type: 'option', value: '高颧骨菱形脸' },
+        faceStyle: { type: 'option', value: '清冷疏离' },
+        boneStructure: { type: 'option', value: '高颧骨留白' },
+        nose: { type: 'option', value: '立体高鼻梁' },
+        lips: { type: 'option', value: '复古M唇' },
+        eyes: { type: 'option', value: '细长凤眼' },
+        eyebrow: { type: 'option', value: '英气挑眉' },
+        eyeExpression: { type: 'option', value: '清冷坚定' },
+        bodyType: { type: 'option', value: '高挑纤细' },
+        hairstyle: { type: 'option', value: '韩系大波浪' },
+        hairColor: { type: 'option', value: '#1a1a1a' },
+        expression: { type: 'option', value: '自信克制' },
+        photography: { type: 'option', value: '浅灰影棚' }
+      }
+    }, {
+      id: 'builtin-3',
+      name: '少年感',
+      values: {
+        gender: { type: 'option', value: 'male' },
+        age: { type: 'option', value: '23–28' },
+        region: { type: 'option', value: '东亚地区' },
+        regionDetail: { type: 'option', value: '日本' },
+        skinTone: { type: 'option', value: '#f0c4a8' },
+        skinTexture: { type: 'option', value: '原生肌理' },
+        makeup: { type: 'option', value: '无妆原生' },
+        clothing: { type: 'option', value: '简约白衬衫' },
+        accessories: { type: 'option', value: '细框眼镜' },
+        faceShape: { type: 'option', value: '清朗长脸' },
+        faceStyle: { type: 'option', value: '少年感' },
+        boneStructure: { type: 'option', value: '清晰下颌' },
+        nose: { type: 'option', value: '英气直鼻' },
+        lips: { type: 'option', value: '中性直线唇' },
+        eyes: { type: 'option', value: '内双垂眼' },
+        eyebrow: { type: 'option', value: '自然浓眉' },
+        eyeExpression: { type: 'option', value: '温和松弛' },
+        bodyType: { type: 'option', value: '修长有力' },
+        hairstyle: { type: 'option', value: '日系微分碎盖' },
+        hairColor: { type: 'option', value: '#4a4a4a' },
+        expression: { type: 'option', value: '平静正视' },
+        photography: { type: 'option', value: '正面半身' }
+      }
+    }]
+
+    // ===================== UI 组件 =====================
+    function App() {
+      const [promptMode, setPromptMode] = React.useState('natural')
+      const [copied, setCopied] = React.useState(false)
+      const [showConfigMenu, setShowConfigMenu] = React.useState(false)
+      const [newConfigName, setNewConfigName] = React.useState('')
+      const [saveModalOpen, setSaveModalOpen] = React.useState(false)
+      const [activeTabId, setActiveTabId] = React.useState('base')
+      const [expandedInputs, setExpandedInputs] = React.useState({})
+      const [customInputValues, setCustomInputValues] = React.useState({})
+
+      const values = useStore(s => s.values)
+      const customValues = useStore(s => s.customValues)
+      const customConfigs = useStore(s => s.customConfigs)
+      const filterByGender = useStore(s => s.filterByGender)
+      const getAvailableOptions = useStore(s => s.getAvailableOptions)
+      const selectValue = useStore(s => s.selectValue)
+      const addCustomValue = useStore(s => s.addCustomValue)
+      const removeCustomValue = useStore(s => s.removeCustomValue)
+      const toggleFilter = useStore(s => s.toggleFilter)
+      const randomize = useStore(s => s.randomize)
+      const loadConfig = useStore(s => s.loadConfig)
+      const saveCustomConfig = useStore(s => s.saveCustomConfig)
+      const deleteCustomConfig = useStore(s => s.deleteCustomConfig)
+      const resetToDefault = useStore(s => s.resetToDefault)
+
+      // 获取字段当前选中的显示标签
+      const getFieldDisplayLabel = (key) => {
+        const v = values[key]
+        if (!v) return ''
+        const allOpts = getAvailableOptions(key)
+        const found = allOpts.find(o => o.value === v.value && o.type === v.type)
+        if (found) return found.label
+        return v.value || ''
+      }
+
+      // 获取字段当前类型
+      const getFieldType = (key) => {
+        const v = values[key]
+        if (!v) return 'option'
+        return v.type || 'option'
+      }
+
+      // 生成 Prompt（去除“可选”字样，使用label）
+      const generatedPrompt = React.useMemo(() => {
+        const lines = []
+        TABS.forEach(tab => {
+          tab.keys.forEach(key => {
+            const def = FIELD_DEFS[key]
+            let label = def.label.replace(/\s*（可选）\s*/, '').trim()
+            let val = getFieldDisplayLabel(key)
+            if (val) {
+              if (def.isGender) {
+                const genderMap = {
+                  'female': '女性',
+                  'male': '男性',
+                  'neutral': '中性',
+                  'female_neutral': '中性（生理性别女）',
+                  'male_neutral': '中性（生理性别男）'
+                }
+                val = genderMap[val] || val
+              }
+              lines.push(`${label}：${val}`)
+            }
+          })
+        })
+        if (promptMode === 'json') {
+          const jsonObj = {}
+          TABS.forEach(tab => {
+            tab.keys.forEach(key => {
+              jsonObj[key] = getFieldDisplayLabel(key) || ''
+            })
+          })
+          return JSON.stringify(jsonObj, null, 2)
+        } else {
+          return lines.join('\n')
+        }
+      }, [values, promptMode])
+
+      const handleCopy = async () => {
+        await navigator.clipboard.writeText(generatedPrompt)
+        setCopied(true)
+        setTimeout(() => setCopied(false), 2000)
+      }
+
+      // 滚动高亮
+      const contentRef = React.useRef(null)
+      const scrollTimeout = React.useRef(null)
+
+      const updateActiveTab = React.useCallback(() => {
+        const container = contentRef.current
+        if (!container) return
+        const containerRect = container.getBoundingClientRect()
+        const containerTop = containerRect.top
+        let closestId = TABS[0].id
+        let closestDist = Infinity
+
+        for (let i = 0; i < TABS.length; i++) {
+          const el = document.getElementById(TABS[i].id)
+          if (!el) continue
+          const rect = el.getBoundingClientRect()
+          const top = rect.top - containerTop
+          if (top > containerRect.height) continue
+          let dist
+          if (top <= 0) {
+            dist = Math.abs(top)
+          } else {
+            dist = top
+          }
+          if (top >= 0 && dist < closestDist) {
+            closestDist = dist
+            closestId = TABS[i].id
+          } else if (top < 0 && Math.abs(top) < Math.abs(closestDist)) {
+            if (closestDist === Infinity || closestDist < 0) {
+              closestDist = dist
+              closestId = TABS[i].id
+            }
+          }
+        }
+        if (closestDist === Infinity) {
+          closestId = TABS[TABS.length - 1].id
+        }
+        setActiveTabId(prev => prev === closestId ? prev : closestId)
+      }, [])
+
+      const handleScroll = React.useCallback(() => {
+        if (scrollTimeout.current) return
+        scrollTimeout.current = setTimeout(() => {
+          updateActiveTab()
+          scrollTimeout.current = null
+        }, 30)
+      }, [updateActiveTab])
+
+      React.useEffect(() => {
+        const container = contentRef.current
+        if (container) {
+          container.addEventListener('scroll', handleScroll)
+          updateActiveTab()
+          return () => {
+            container.removeEventListener('scroll', handleScroll)
+            if (scrollTimeout.current) {
+              clearTimeout(scrollTimeout.current)
+              scrollTimeout.current = null
+            }
+          }
+        }
+      }, [handleScroll, updateActiveTab])
+
+      const scrollToTab = (tabId) => {
+        const el = document.getElementById(tabId)
+        if (el) {
+          el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+        }
+      }
+
+      // 渲染字段（使用 getAvailableOptions 获取统一选项列表）
+      const renderField = (key) => {
+        const def = FIELD_DEFS[key]
+        const allOpts = getAvailableOptions(key)
+        const currentDisplay = getFieldDisplayLabel(key)
+        const currentType = getFieldType(key)
+        const customList = customValues[key] || []
+
+        // 颜色字段特殊渲染（使用色块+标签）
+        if (def.type === 'color') {
+          const isCustomColor = currentType === 'custom'
+          return (
+            <div key={key} className="mb-3">
+              <div className="text-xs font-medium text-slate-400 dark:text-slate-500 mb-1">{def.label}</div>
+              <div className="flex flex-wrap items-center gap-1.5">
+                {allOpts.map(opt => {
+                  if (opt.type === 'option') {
+                    const color = opt.value
+                    const label = opt.label
+                    return (
+                      <button
+                        key={color}
+                        className={`w-6 h-6 rounded-full border-2 transition-all duration-200 ${!isCustomColor && currentDisplay === label ? 'border-white ring-2 ring-blue-400 shadow-lg' : 'border-transparent hover:scale-110'}`}
+                        style={{ backgroundColor: color }}
+                        onClick={() => selectValue(key, color)}
+                        title={label}
+                      />
+                    )
+                  } else {
+                    const text = opt.value
+                    return (
+                      <span key={text} className="inline-flex items-center gap-0.5 bg-slate-700/60 rounded-full px-2 py-0.5 text-xs text-slate-300">
+                        <button
+                          onClick={() => selectValue(key, text)}
+                          className={`hover:text-white ${currentType === 'custom' && currentDisplay === text ? 'text-blue-300' : ''}`}
+                        >
+                          {text}
+                        </button>
+                        <button
+                          onClick={() => removeCustomValue(key, text)}
+                          className="text-red-400 hover:text-red-300 ml-0.5"
+                          title="删除此自定义值"
+                        >
+                          <Trash2 className="w-3 h-3" />
+                        </button>
+                      </span>
+                    )
+                  }
+                })}
+                <button
+                  className={`px-2 py-0.5 text-xs rounded-full border transition-all ${isCustomColor ? 'bg-blue-500/20 border-blue-400 text-blue-300' : 'border-slate-700/60 text-slate-400 hover:border-slate-500'}`}
+                  onClick={() => {
+                    if (isCustomColor) {
+                      // 切回预设第一个
+                      const firstOpt = allOpts.find(o => o.type === 'option')
+                      if (firstOpt) selectValue(key, firstOpt.value)
+                    } else {
+                      setExpandedInputs(prev => ({ ...prev, [key]: true }))
+                    }
+                  }}
+                >
+                  {isCustomColor ? '预设' : '自定义'}
+                </button>
+              </div>
+              {/* 自定义输入框 */}
+              {expandedInputs[key] && (
+                <div className="mt-1 flex flex-wrap items-center gap-1">
+                  <input
+                    type="text"
+                    className="bg-slate-700 border border-slate-600 rounded px-2 py-0.5 text-xs text-slate-200 w-32"
+                    placeholder="输入自定义颜色名称或值..."
+                    value={customInputValues[key] || ''}
+                    onChange={(e) => setCustomInputValues(prev => ({ ...prev, [key]: e.target.value }))}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        const val = customInputValues[key]?.trim()
+                        if (val) {
+                          addCustomValue(key, val)
+                          setCustomInputValues(prev => ({ ...prev, [key]: '' }))
+                          setExpandedInputs(prev => ({ ...prev, [key]: false }))
+                        }
+                      }
+                    }}
+                    onBlur={() => {
+                      const val = customInputValues[key]?.trim()
+                      if (val) {
+                        addCustomValue(key, val)
+                        setCustomInputValues(prev => ({ ...prev, [key]: '' }))
+                        setExpandedInputs(prev => ({ ...prev, [key]: false }))
+                      } else {
+                        setExpandedInputs(prev => ({ ...prev, [key]: false }))
+                      }
+                    }}
+                    autoFocus
+                  />
+                  <button
+                    className="px-2 py-0.5 text-xs bg-blue-500/20 text-blue-300 rounded border border-blue-400/50 hover:bg-blue-500/30"
+                    onClick={() => {
+                      const val = customInputValues[key]?.trim()
+                      if (val) {
+                        addCustomValue(key, val)
+                        setCustomInputValues(prev => ({ ...prev, [key]: '' }))
+                        setExpandedInputs(prev => ({ ...prev, [key]: false }))
+                      } else {
+                        setExpandedInputs(prev => ({ ...prev, [key]: false }))
+                      }
+                    }}
+                  >
+                    确认
+                  </button>
+                  <button
+                    className="px-2 py-0.5 text-xs text-slate-400 hover:text-slate-200"
+                    onClick={() => {
+                      setExpandedInputs(prev => ({ ...prev, [key]: false }))
+                      setCustomInputValues(prev => ({ ...prev, [key]: '' }))
+                    }}
+                  >
+                    取消
+                  </button>
+                </div>
+              )}
+            </div>
+          )
+        }
+
+        // 非颜色字段
+        const isGender = def.isGender
+        return (
+          <div key={key} className="mb-3">
+            <div className="text-xs font-medium text-slate-400 dark:text-slate-500 mb-1">{def.label}</div>
+            <div className="flex flex-wrap gap-1">
+              {allOpts.map(opt => {
+                const isActive = currentDisplay === opt.label && currentType === opt.type
+                return (
+                  <button
+                    key={opt.value}
+                    className={`px-2 py-0.5 text-xs rounded-full border transition-all ${isActive ? 'bg-blue-500/20 border-blue-400 text-blue-300 shadow-sm' : 'border-slate-700/60 text-slate-400 hover:border-slate-500 hover:text-slate-200'}`}
+                    onClick={() => selectValue(key, opt.value)}
+                  >
+                    {opt.label}
+                    {opt.type === 'option' && opt.gender && opt.gender !== 'both' && !isGender && (
+                      <span className="ml-1 text-[10px] text-slate-500">
+                        ({opt.gender === 'female' ? '♀' : '♂'})
+                      </span>
+                    )}
+                    {opt.type === 'custom' && (
+                      <span className="ml-1 text-[10px] text-blue-400">(自定义)</span>
+                    )}
+                  </button>
+                )
+              })}
+              <button
+                className={`px-2 py-0.5 text-xs rounded-full border transition-all ${currentType === 'custom' ? 'bg-blue-500/20 border-blue-400 text-blue-300' : 'border-slate-700/60 text-slate-400 hover:border-slate-500'}`}
+                onClick={() => {
+                  if (currentType === 'custom') {
+                    const firstOpt = allOpts.find(o => o.type === 'option')
+                    if (firstOpt) selectValue(key, firstOpt.value)
+                  } else {
+                    setExpandedInputs(prev => ({ ...prev, [key]: true }))
+                  }
+                }}
+              >
+                {currentType === 'custom' ? '预设' : '自定义'}
+              </button>
+            </div>
+
+            {/* 自定义输入框 */}
+            {expandedInputs[key] && (
+              <div className="mt-1 flex flex-wrap items-center gap-1">
+                <input
+                  type="text"
+                  className="bg-slate-700 border border-slate-600 rounded px-2 py-0.5 text-xs text-slate-200 w-32"
+                  placeholder={`输入自定义${def.label}...`}
+                  value={customInputValues[key] || ''}
+                  onChange={(e) => setCustomInputValues(prev => ({ ...prev, [key]: e.target.value }))}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      const val = customInputValues[key]?.trim()
+                      if (val) {
+                        addCustomValue(key, val)
+                        setCustomInputValues(prev => ({ ...prev, [key]: '' }))
+                        setExpandedInputs(prev => ({ ...prev, [key]: false }))
+                      }
+                    }
+                  }}
+                  onBlur={() => {
+                    const val = customInputValues[key]?.trim()
+                    if (val) {
+                      addCustomValue(key, val)
+                      setCustomInputValues(prev => ({ ...prev, [key]: '' }))
+                      setExpandedInputs(prev => ({ ...prev, [key]: false }))
+                    } else {
+                      setExpandedInputs(prev => ({ ...prev, [key]: false }))
+                    }
+                  }}
+                  autoFocus
+                />
+                <button
+                  className="px-2 py-0.5 text-xs bg-blue-500/20 text-blue-300 rounded border border-blue-400/50 hover:bg-blue-500/30"
+                  onClick={() => {
+                    const val = customInputValues[key]?.trim()
+                    if (val) {
+                      addCustomValue(key, val)
+                      setCustomInputValues(prev => ({ ...prev, [key]: '' }))
+                      setExpandedInputs(prev => ({ ...prev, [key]: false }))
+                    } else {
+                      setExpandedInputs(prev => ({ ...prev, [key]: false }))
+                    }
+                  }}
+                >
+                  确认
+                </button>
+                <button
+                  className="px-2 py-0.5 text-xs text-slate-400 hover:text-slate-200"
+                  onClick={() => {
+                    setExpandedInputs(prev => ({ ...prev, [key]: false }))
+                    setCustomInputValues(prev => ({ ...prev, [key]: '' }))
+                  }}
+                >
+                  取消
+                </button>
+              </div>
+            )}
+
+            {/* 显示自定义值列表 */}
+            {customList.length > 0 && (
+              <div className="mt-1 flex flex-wrap gap-1">
+                {customList.map(text => (
+                  <span key={text} className="inline-flex items-center gap-0.5 bg-slate-700/60 rounded-full px-2 py-0.5 text-xs text-slate-300">
+                    <button
+                      onClick={() => selectValue(key, text)}
+                      className={`hover:text-white ${currentType === 'custom' && currentDisplay === text ? 'text-blue-300' : ''}`}
+                    >
+                      {text}
+                    </button>
+                    <button
+                      onClick={() => removeCustomValue(key, text)}
+                      className="text-red-400 hover:text-red-300 ml-0.5"
+                      title="删除此自定义值"
+                    >
+                      <Trash2 className="w-3 h-3" />
+                    </button>
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+        )
+      }
+
+      const handleSaveConfig = () => {
+        if (!newConfigName.trim()) {
+          alert('请输入配置名称')
+          return
+        }
+        saveCustomConfig(newConfigName.trim())
+        setNewConfigName('')
+        setSaveModalOpen(false)
+      }
+
+      const handleLoadConfig = (config) => {
+        loadConfig(config.values)
+        setShowConfigMenu(false)
+      }
+
+      const handleDeleteConfig = (id, e) => {
+        e.stopPropagation()
+        if (confirm('确定删除此自定义配置吗？')) {
+          deleteCustomConfig(id)
+        }
+      }
+
+      return (
+        <div className="h-screen w-screen overflow-hidden bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 text-slate-200 flex flex-col">
+          <header className="flex-shrink-0 p-3 border-b border-slate-700/80 flex items-center justify-between bg-slate-800/40 backdrop-blur-sm">
+            <div className="flex items-center gap-3">
+              <h1 className="text-xl font-bold tracking-tight flex items-center gap-2">
+                <Sparkles className="w-5 h-5 text-blue-400" />
+                捏脸工坊
+              </h1>
+              <div className="flex items-center gap-2">
+                <button onClick={randomize} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm bg-purple-500/20 hover:bg-purple-500/30 text-purple-300 transition-all">
+                  <Shuffle className="w-4 h-4" />
+                  随机
+                </button>
+                <button onClick={() => setSaveModalOpen(true)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm bg-green-500/20 hover:bg-green-500/30 text-green-300 transition-all">
+                  <Save className="w-4 h-4" />
+                  保存配置
+                </button>
+                <button onClick={() => setShowConfigMenu(!showConfigMenu)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm bg-blue-500/20 hover:bg-blue-500/30 text-blue-300 transition-all">
+                  加载配置
+                  {showConfigMenu ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                </button>
+                <button onClick={resetToDefault} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm bg-slate-600/30 hover:bg-slate-600/50 text-slate-300 transition-all">
+                  重置
+                </button>
+                <button onClick={toggleFilter} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm transition-all ${filterByGender ? 'bg-blue-500/30 text-blue-300 border border-blue-400/50' : 'bg-slate-600/30 text-slate-400'}`}>
+                  <Filter className="w-4 h-4" />
+                  {filterByGender ? '性别筛选开' : '性别筛选关'}
+                </button>
+              </div>
+            </div>
+            <div className="flex items-center gap-3">
+              <button className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm transition-all ${promptMode === 'natural' ? 'bg-blue-500/20 text-blue-300 border border-blue-400/50' : 'text-slate-400 hover:text-slate-200'}`} onClick={() => setPromptMode('natural')}>
+                <FileText className="w-4 h-4" />
+                自然语言
+              </button>
+              <button className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm transition-all ${promptMode === 'json' ? 'bg-blue-500/20 text-blue-300 border border-blue-400/50' : 'text-slate-400 hover:text-slate-200'}`} onClick={() => setPromptMode('json')}>
+                <FileJson className="w-4 h-4" />
+                JSON
+              </button>
+            </div>
+          </header>
+
+          {showConfigMenu && (
+            <div className="flex-shrink-0 bg-slate-800/90 border-b border-slate-700/80 p-2 max-h-48 overflow-y-auto backdrop-blur-sm">
+              <div className="text-xs text-slate-400 mb-1">内置预设（不可删除）</div>
+              <div className="flex flex-wrap gap-1.5 mb-2">
+                {BUILTIN_CONFIGS.map(cfg => (
+                  <button key={cfg.id} onClick={() => handleLoadConfig(cfg)} className="px-2.5 py-1 text-xs rounded-full bg-slate-700/60 hover:bg-slate-600/70 text-slate-300 transition-all">
+                    {cfg.name}
+                  </button>
+                ))}
+              </div>
+              {customConfigs.length > 0 && (
+                <>
+                  <div className="text-xs text-slate-400 mb-1">我的配置（可删除）</div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {customConfigs.map(cfg => (
+                      <div key={cfg.id} className="flex items-center gap-1 bg-slate-700/40 rounded-full pl-2.5 pr-1 py-0.5">
+                        <button onClick={() => handleLoadConfig(cfg)} className="text-xs text-slate-300 hover:text-white">
+                          {cfg.name}
+                        </button>
+                        <button onClick={(e) => handleDeleteConfig(cfg.id, e)} className="p-0.5 text-red-400 hover:text-red-300 transition-all" title="删除">
+                          <Trash2 className="w-3 h-3" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
+          )}
+
+          <div className="flex-1 flex overflow-hidden">
+            <nav className="w-28 flex-shrink-0 bg-slate-800/50 border-r border-slate-700/80 p-2 overflow-y-auto">
+              {TABS.map(tab => (
+                <button key={tab.id} className={`w-full text-left px-3 py-2 rounded-lg text-sm transition-all ${activeTabId === tab.id ? 'bg-blue-500/20 text-blue-300 font-medium' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-700/50'}`} onClick={() => scrollToTab(tab.id)}>
+                  {tab.label}
+                </button>
+              ))}
+            </nav>
+
+            <div ref={contentRef} className="flex-1 p-4 overflow-y-auto bg-slate-900/30">
+              {TABS.map(tab => (
+                <fieldset key={tab.id} id={tab.id} className="mb-6 border border-slate-700/60 rounded-lg p-3 bg-slate-800/20 scroll-mt-4">
+                  <legend className="text-sm font-semibold text-slate-300 px-2">{tab.label}</legend>
+                  <div className="space-y-2">
+                    {tab.keys.map(key => renderField(key))}
+                  </div>
+                </fieldset>
+              ))}
+              <div className="h-[calc(100vh-300px)] pointer-events-none" />
+            </div>
+          </div>
+
+          <div className="flex-shrink-0 border-t border-slate-700/80 p-2 bg-slate-800/30 backdrop-blur-sm">
+            <div className="flex items-start gap-3">
+              <div className="flex-1 min-w-0">
+                <div className="text-xs text-slate-400 mb-0.5">生成的 Prompt</div>
+                <pre className="text-xs text-slate-300 bg-slate-900/60 p-2 rounded-lg overflow-x-auto whitespace-pre-wrap break-all max-h-20">
+                  {generatedPrompt || '请选择属性'}
+                </pre>
+              </div>
+              <button onClick={handleCopy} className="flex-shrink-0 mt-4 px-3 py-1.5 rounded-lg bg-blue-500/20 hover:bg-blue-500/30 text-blue-300 transition-all flex items-center gap-1.5 text-sm">
+                {copied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+                {copied ? '已复制' : '复制'}
+              </button>
+            </div>
+          </div>
+
+          {saveModalOpen && (
+            <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
+              <div className="bg-slate-800 p-6 rounded-xl shadow-2xl border border-slate-700 w-80">
+                <h3 className="text-lg font-medium mb-3">保存当前配置</h3>
+                <input
+                  type="text"
+                  className="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="输入配置名称"
+                  value={newConfigName}
+                  onChange={(e) => setNewConfigName(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && handleSaveConfig()}
+                  autoFocus
+                />
+                <div className="flex justify-end gap-2 mt-4">
+                  <button onClick={() => setSaveModalOpen(false)} className="px-4 py-1.5 rounded-lg bg-slate-700 hover:bg-slate-600 text-slate-300 text-sm">
+                    取消
+                  </button>
+                  <button onClick={handleSaveConfig} className="px-4 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-sm">
+                    保存
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      )
+    }
+
+    createRoot(document.getElementById("root")).render(<App />)
+  </script>
+</body>
+
+</html>
