@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+  <meta charset="UTF-8">
+  <script type="importmap">
+        {
+            "imports": {
+                "react": "https://esm.sh/react@19.2.4",
+                "react/jsx-runtime": "https://esm.sh/react@19.2.4/jsx-runtime",
+                "react-dom/client": "https://esm.sh/react-dom@19.2.4/client",
+                "lucide-react": "https://esm.sh/lucide-react?external=react",
+                "zustand": "https://esm.sh/zustand?external=react",
+                "marked": "https://esm.sh/marked@14",
+                "@radix-ui/react-tooltip": "https://esm.sh/@radix-ui/react-tooltip@1?external=react",
+                "@radix-ui/react-dialog": "https://esm.sh/@radix-ui/react-dialog@1?external=react",
+                "@radix-ui/react-popover": "https://esm.sh/@radix-ui/react-popover@1?external=react",
+                "@radix-ui/react-toggle-group": "https://esm.sh/@radix-ui/react-toggle-group@1?external=react",
+                "@radix-ui/react-scroll-area": "https://esm.sh/@radix-ui/react-scroll-area@1?external=react",
+                "@radix-ui/react-visually-hidden": "https://esm.sh/@radix-ui/react-visually-hidden@1?external=react"
+            }
+        }
+    </script>
+  <script src="https://cdn.jsdelivr.net/npm/@babel/standalone@latest/babel.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+  <style>
+    {{APP_STYLE}}
+  </style>
+</head>
+
+<body>
+  <div id="root"></div>
+
+  <script type="text/babel" data-type="module">
+    import * as React from "react";
+    window.React = React;
+  </script>
+
+  <script type="text/babel" data-type="module">
+    {{APP_SCRIPT}}
+  </script>
+</body>
+
+</html>

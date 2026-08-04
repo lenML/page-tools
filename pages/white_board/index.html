@@ -2,6 +2,7 @@
 <html lang="zh-CN">
 
 <head>
+  <meta charset="UTF-8">
   <script type="importmap">
         {
             "imports": {
@@ -179,17 +180,17 @@
       list-style: disc;
     }
 
-    .toggle-group-item[data-state="on"] {
+    .toggle-group-item[aria-checked="true"] {
       background: #007acc;
       color: #fff;
     }
 
-    .toggle-group-item[data-state="off"] {
+    .toggle-group-item[aria-checked="false"] {
       color: #858585;
       background: transparent;
     }
 
-    .toggle-group-item[data-state="off"]:hover {
+    .toggle-group-item[aria-checked="false"]:hover {
       background: #3c3c3c;
     }
 
@@ -218,7 +219,8 @@
     import { createRoot } from "react-dom/client";
     import {
       Plus, MousePointer2, Square, Minus as LineIcon, ArrowRight, MapPin,
-      Trash2, Undo2, Redo2, Download, Upload, Map as MapIcon, X, ChevronLeft, Pin
+      Trash2, Undo2, Redo2, Download, Upload, Map as MapIcon, X, ChevronLeft, Pin,
+      Copy, AlignLeft, AlignRight, LayoutGrid, RotateCcw
     } from "lucide-react";
     import { create } from "zustand";
     import { marked } from "marked";
@@ -232,7 +234,7 @@
     marked.use({ breaks: true, gfm: true });
     const renderMarkdownSafe = (text) => text ? marked.parse(text) : '';
 
-    // ========== IndexedDB 图片存储 ==========
+// ========== IndexedDB 图片存储 ==========
     const IMAGE_DB_NAME = 'WhiteboardImages', IMAGE_STORE_NAME = 'images';
     let dbPromise = null;
     function openImageDB() {
@@ -266,28 +268,199 @@
     async function blobToBase64(blob) { return new Promise((res, rej) => { const r = new FileReader(); r.onloadend = () => res(r.result); r.onerror = rej; r.readAsDataURL(blob); }); }
     function base64ToBlob(base64, mime = 'image/webp') { const bs = atob(base64.split(',')[1]); const ab = new ArrayBuffer(bs.length); const ia = new Uint8Array(ab); for (let i = 0; i < bs.length; i++) ia[i] = bs.charCodeAt(i); return new Blob([ab], { type: mime }); }
 
+// ========== 图片节点工具 ==========
+    function loadImageElement(src) {
+      return new Promise((resolve, reject) => {
+        const img = new Image();
+        img.onload = () => resolve(img);
+        img.onerror = reject;
+        img.src = src;
+      });
+    }
+
+    async function getNodeImageElement(node) {
+      const blob = await getNodeImageBlob(node);
+      if (!blob) throw new Error('图片数据不存在');
+      const url = URL.createObjectURL(blob);
+      try {
+        return await loadImageElement(url);
+      } finally {
+        URL.revokeObjectURL(url);
+      }
+    }
+
+    async function getNodeImageBlob(node) {
+      if (node.imageId) {
+        const blob = await getImageFromDB(node.imageId);
+        if (blob) return blob;
+      }
+      if (node.src) {
+        const res = await fetch(node.src);
+        if (res.ok) return res.blob();
+      }
+      return null;
+    }
+
+    async function imageNodeToBlob(node, mime = 'image/webp', quality = 0.92) {
+      const blob = await getNodeImageBlob(node);
+      if (!blob) throw new Error('图片数据不存在');
+      const url = URL.createObjectURL(blob);
+      try {
+        const img = await loadImageElement(url);
+        const canvas = document.createElement('canvas');
+        canvas.width = img.naturalWidth || img.width;
+        canvas.height = img.naturalHeight || img.height;
+        const ctx = canvas.getContext('2d');
+        if (mime === 'image/jpeg') {
+          ctx.fillStyle = '#ffffff';
+          ctx.fillRect(0, 0, canvas.width, canvas.height);
+        }
+        ctx.drawImage(img, 0, 0);
+        return await new Promise((resolve, reject) => canvas.toBlob(b => b ? resolve(b) : reject(new Error('图片转换失败')), mime, quality));
+      } finally {
+        URL.revokeObjectURL(url);
+      }
+    }
+
+    async function copyImageToClipboard(node) {
+      if (!navigator.clipboard?.write || typeof ClipboardItem === 'undefined') throw new Error('当前浏览器不支持写入图片剪贴板');
+      const png = await imageNodeToBlob(node, 'image/png');
+      await navigator.clipboard.write([new ClipboardItem({ 'image/png': png })]);
+    }
+
+    async function downloadNodeImage(node, mime, ext, quality = 0.92) {
+      const blob = await imageNodeToBlob(node, mime, quality);
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = `whiteboard_image_${node.id}.${ext}`;
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+    }
+
+
+async function addImageNodeFromBlob(blob, wx, wy) {
+      const originalUrl = URL.createObjectURL(blob);
+      try {
+        const img = await loadImageElement(originalUrl);
+        const originalWidth = img.naturalWidth || img.width;
+        const originalHeight = img.naturalHeight || img.height;
+        const cb = await compressImageToWebP(blob);
+        const imageId = genId();
+        await saveImageToDB(imageId, cb);
+        useStore.getState().addNode({
+          id: genId(),
+          type: 'image',
+          x: wx - originalWidth / 2,
+          y: wy - originalHeight / 2,
+          width: originalWidth,
+          height: originalHeight,
+          originalWidth,
+          originalHeight,
+          src: URL.createObjectURL(cb),
+          imageId,
+        });
+      } finally {
+        URL.revokeObjectURL(originalUrl);
+      }
+    }
+
+function getNodeBounds(node) {
+      if (node.type === 'line' || node.type === 'arrow') {
+        const x1 = node.x, y1 = node.y, x2 = node.x2 ?? node.x + (node.width || 0), y2 = node.y2 ?? node.y + (node.height || 0);
+        return { x: Math.min(x1, x2), y: Math.min(y1, y2), width: Math.abs(x2 - x1), height: Math.abs(y2 - y1) };
+      }
+      return { x: node.x, y: node.y, width: node.width || 60, height: node.height || 30 };
+    }
+
+    function buildNodeMove(node, newX, newY) {
+      const b = getNodeBounds(node);
+      if (node.type === 'line' || node.type === 'arrow') {
+        const dx = newX - b.x, dy = newY - b.y;
+        return { x: node.x + dx, y: node.y + dy, x2: (node.x2 ?? node.x + (node.width || 0)) + dx, y2: (node.y2 ?? node.y + (node.height || 0)) + dy };
+      }
+      return { x: newX, y: newY };
+    }
+
+    function computeAutoLayout(nodes, regionW, regionH) {
+      const gap = 16;
+      const margin = Math.min(regionW, regionH) * 0.08;
+      const targetW = Math.max(80, regionW - margin * 2), targetH = Math.max(80, regionH - margin * 2);
+      const items = nodes.map(n => ({ node: n, bounds: getNodeBounds(n) })).sort((a, b) => a.bounds.y - b.bounds.y || a.bounds.x - b.bounds.x);
+      if (!items.length) return new Map();
+      let best = null;
+      for (let cols = 1; cols <= items.length; cols++) {
+        const rows = Math.ceil(items.length / cols);
+        let layoutH = 0, layoutW = 0;
+        for (let r = 0; r < rows; r++) {
+          const row = items.slice(r * cols, r * cols + cols);
+          const rowW = row.reduce((sum, i) => sum + i.bounds.width, 0) + (row.length - 1) * gap;
+          layoutW = Math.max(layoutW, rowW);
+          layoutH += Math.max(...row.map(i => i.bounds.height));
+          if (r < rows - 1) layoutH += gap;
+        }
+        const w = Math.max(1, layoutW);
+        const h = Math.max(1, layoutH);
+        const fits = w <= targetW && h <= targetH;
+        const diff = Math.abs(w / h - regionW / regionH);
+        const area = w * h;
+        const score = fits ? area + 1e9 : area;
+        if (!best || score > best.score || (score === best.score && diff < best.diff)) best = { cols, w, h, score, diff };
+      }
+      const startX = Math.max(0, (regionW - best.w) / 2), startY = Math.max(0, (regionH - best.h) / 2);
+      const updates = new Map();
+      let y = startY;
+      for (let r = 0; r < Math.ceil(items.length / best.cols); r++) {
+        const row = items.slice(r * best.cols, r * best.cols + best.cols);
+        const rowMaxH = Math.max(...row.map(i => i.bounds.height));
+        let x = startX;
+        for (const item of row) {
+          updates.set(item.node.id, buildNodeMove(item.node, x, y));
+          x += item.bounds.width + gap;
+        }
+        y += rowMaxH + gap;
+      }
+      return updates;
+    }
+
+    function computeAlignment(nodes, mode) {
+      const items = nodes.map(n => ({ node: n, bounds: getNodeBounds(n) })).sort((a, b) => a.bounds.y - b.bounds.y || a.bounds.x - b.bounds.x);
+      if (items.length < 2) return new Map();
+      const refX = mode === 'left' ? Math.min(...items.map(i => i.bounds.x)) : Math.max(...items.map(i => i.bounds.x + i.bounds.width));
+      const updates = new Map();
+      let y = items[0].bounds.y;
+      for (const item of items) {
+        const x = mode === 'left' ? refX : refX - item.bounds.width;
+        updates.set(item.node.id, buildNodeMove(item.node, x, y));
+        y += item.bounds.height + 16;
+      }
+      return updates;
+    }
+
     const genId = () => `n_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
     const deepClone = (obj) => JSON.parse(JSON.stringify(obj));
     const getBoardIdFromHash = () => new URLSearchParams(window.location.hash.slice(1)).get('id') || null;
     const setBoardIdToHash = (id) => { window.location.hash = `id=${encodeURIComponent(id)}`; };
     const clearHash = () => { window.location.hash = ''; };
 
-    // ========== Zustand Store ==========
+// ========== Zustand Store ==========
     const useStore = create((set, get) => {
-      const loadBoards = () => { try { return JSON.parse(localStorage.getItem('wb_boards_v6')) || {}; } catch { return {}; } };
+      const persistNode = n => n && n.type === 'image' && n.imageId ? { ...n, src: undefined } : n;
+      const persistSnapshot = snap => snap ? { ...snap, nodes: (snap.nodes || []).map(persistNode) } : snap;
+      const persistBoard = b => b ? { ...b, nodes: (b.nodes || []).map(persistNode), history: b.history ? { ...b.history, past: (b.history.past || []).map(persistSnapshot), future: (b.history.future || []).map(persistSnapshot) } : b.history } : b;
+      const loadBoards = () => { try { const raw = JSON.parse(localStorage.getItem('wb_boards_v6')) || {}; const saved = {}; for (const [id, b] of Object.entries(raw)) saved[id] = persistBoard(b); return saved; } catch { return {}; } };
       const saved = loadBoards();
       const hashId = getBoardIdFromHash();
       const initialBoardId = hashId && saved[hashId] ? hashId : null;
       const initialView = initialBoardId ? 'canvas' : 'board-list';
       let saveTimer;
-      const scheduleSave = () => { clearTimeout(saveTimer); saveTimer = setTimeout(() => { const { boards } = get(); const s = {}; for (const [id, b] of Object.entries(boards)) s[id] = { nodes: b.nodes, pins: b.pins, viewport: b.viewport, name: b.name, history: b.history }; try { localStorage.setItem('wb_boards_v6', JSON.stringify(s)); } catch { } }, 300); };
+      const scheduleSave = () => { clearTimeout(saveTimer); saveTimer = setTimeout(() => { const { boards } = get(); const s = {}; for (const [id, b] of Object.entries(boards)) s[id] = { nodes: (b.nodes || []).map(persistNode), pins: b.pins, viewport: b.viewport, name: b.name, history: b.history ? { ...b.history, past: (b.history.past || []).map(persistSnapshot), future: (b.history.future || []).map(persistSnapshot) } : b.history }; try { localStorage.setItem('wb_boards_v6', JSON.stringify(s)); } catch { } }, 300); };
       const saveHistory = () => { const { boards, currentBoardId } = get(); const board = boards[currentBoardId]; if (!board) return; const snap = { nodes: deepClone(board.nodes), pins: deepClone(board.pins) }; set({ boards: { ...boards, [currentBoardId]: { ...board, history: { past: [...board.history.past.slice(-100), snap], future: [] } } } }); scheduleSave(); };
 
       return {
         view: initialView,
         currentBoardId: initialBoardId || 'default',
         boards: saved,
-        selectedNodeId: null,
+        selectedNodeIds: [],
         tool: 'select',
         clipboard: null,
         dragging: null,
@@ -299,12 +472,13 @@
         resizing: null,
 
         setView: (v) => set({ view: v }),
+        saveHistory,
         setCurrentBoardId: (id) => {
           const { boards } = get();
           if (!boards[id]) {
-            set(s => ({ boards: { ...s.boards, [id]: { nodes: [], pins: [], viewport: { x: 0, y: 0, zoom: 1 }, history: { past: [], future: [] }, name: id } }, currentBoardId: id, selectedNodeId: null, tool: 'select', view: 'canvas' }));
+            set(s => ({ boards: { ...s.boards, [id]: { nodes: [], pins: [], viewport: { x: 0, y: 0, zoom: 1 }, history: { past: [], future: [] }, name: id } }, currentBoardId: id, selectedNodeIds: [], tool: 'select', view: 'canvas' }));
           } else {
-            set({ currentBoardId: id, selectedNodeId: null, tool: 'select', view: 'canvas' });
+            set({ currentBoardId: id, selectedNodeIds: [], tool: 'select', view: 'canvas' });
           }
           setBoardIdToHash(id);
           scheduleSave();
@@ -313,7 +487,7 @@
           const id = name || `画布_${Date.now()}`;
           const { boards } = get();
           const finalId = boards[id] ? `${id}_${Date.now()}` : id;
-          set(s => ({ boards: { ...s.boards, [finalId]: { nodes: [], pins: [], viewport: { x: 0, y: 0, zoom: 1 }, history: { past: [], future: [] }, name: finalId } }, currentBoardId: finalId, selectedNodeId: null, tool: 'select', view: 'canvas' }));
+          set(s => ({ boards: { ...s.boards, [finalId]: { nodes: [], pins: [], viewport: { x: 0, y: 0, zoom: 1 }, history: { past: [], future: [] }, name: finalId } }, currentBoardId: finalId, selectedNodeIds: [], tool: 'select', view: 'canvas' }));
           setBoardIdToHash(finalId);
           scheduleSave();
         },
@@ -323,16 +497,17 @@
           if (keys.length <= 1) return;
           const newBoards = { ...boards }; delete newBoards[id];
           const newId = id === currentBoardId ? (keys.find(k => k !== id) || 'default') : currentBoardId;
-          set({ boards: newBoards, currentBoardId: newId, selectedNodeId: null, deleteDialogTarget: null });
+          set({ boards: newBoards, currentBoardId: newId, selectedNodeIds: [], deleteDialogTarget: null });
           if (id === currentBoardId) setBoardIdToHash(newId);
           scheduleSave();
         },
         setDeleteDialogTarget: (id) => set({ deleteDialogTarget: id }),
         clearDeleteDialogTarget: () => set({ deleteDialogTarget: null }),
-        goBackToList: () => { clearHash(); set({ view: 'board-list', selectedNodeId: null, tool: 'select', editingNodeId: null }); },
-        setTool: (tool) => set({ tool, selectedNodeId: tool !== 'select' ? null : get().selectedNodeId }),
-        selectNode: (id) => { if (get().tool === 'select') set({ selectedNodeId: id, editingNodeId: null }); },
-        deselectAll: () => set({ selectedNodeId: null, editingNodeId: null }),
+        goBackToList: () => { clearHash(); set({ view: 'board-list', selectedNodeIds: [], tool: 'select', editingNodeId: null }); },
+        setTool: (tool) => set({ tool, selectedNodeIds: tool !== 'select' ? [] : get().selectedNodeIds }),
+        selectNode: (id) => { if (get().tool === 'select') set({ selectedNodeIds: [id], editingNodeId: null }); },
+        setSelectedNodes: (ids) => set({ selectedNodeIds: ids, editingNodeId: null }),
+        deselectAll: () => set({ selectedNodeIds: [], editingNodeId: null }),
         startEditingNode: (id) => set({ editingNodeId: id }),
         stopEditingNode: () => {
           const { editingNodeId, boards, currentBoardId } = get();
@@ -344,37 +519,88 @@
             scheduleSave();
           } else set({ editingNodeId: null });
         },
-        setViewport: (vp) => { const { boards, currentBoardId } = get(); const board = boards[currentBoardId]; if (board) set({ boards: { ...boards, [currentBoardId]: { ...board, viewport: { ...board.viewport, ...vp } } } }); },
+        setViewport: (vp) => { const { boards, currentBoardId } = get(); const board = boards[currentBoardId]; if (board) { set({ boards: { ...boards, [currentBoardId]: { ...board, viewport: { ...board.viewport, ...vp } } } }); scheduleSave(); } },
         zoomAt: (sx, sy, delta) => {
           const { boards, currentBoardId } = get(); const board = boards[currentBoardId]; if (!board) return;
           const vp = board.viewport; const factor = delta > 0 ? 1.1 : 1 / 1.1; const nz = Math.max(0.06, Math.min(8, vp.zoom * factor));
           const wx = (sx - vp.x) / vp.zoom, wy = (sy - vp.y) / vp.zoom;
           set({ boards: { ...boards, [currentBoardId]: { ...board, viewport: { x: sx - wx * nz, y: sy - wy * nz, zoom: nz } } } });
+          scheduleSave();
         },
-        addNode: (node) => { saveHistory(); const { boards, currentBoardId } = get(); const board = boards[currentBoardId]; if (board) { set({ boards: { ...boards, [currentBoardId]: { ...board, nodes: [...board.nodes, node] } }, selectedNodeId: node.id }); scheduleSave(); } },
+        addNode: (node) => { saveHistory(); const { boards, currentBoardId } = get(); const board = boards[currentBoardId]; if (board) { set({ boards: { ...boards, [currentBoardId]: { ...board, nodes: [...board.nodes, node] } }, selectedNodeIds: [node.id] }); scheduleSave(); } },
+        addNodes: (newNodes) => { if (!newNodes.length) return; saveHistory(); const { boards, currentBoardId } = get(); const board = boards[currentBoardId]; if (board) { set({ boards: { ...boards, [currentBoardId]: { ...board, nodes: [...board.nodes, ...newNodes] } }, selectedNodeIds: newNodes.map(n => n.id) }); scheduleSave(); } },
         updateNode: (id, updates) => { const { boards, currentBoardId } = get(); const board = boards[currentBoardId]; if (board) { set({ boards: { ...boards, [currentBoardId]: { ...board, nodes: board.nodes.map(n => n.id === id ? { ...n, ...updates } : n) } } }); scheduleSave(); } },
-        deleteNode: (id) => { saveHistory(); const { boards, currentBoardId } = get(); const board = boards[currentBoardId]; if (!board) return; const node = board.nodes.find(n => n.id === id); if (node?.type === 'image' && node.imageId) deleteImageFromDB(node.imageId).catch(console.error); set({ boards: { ...boards, [currentBoardId]: { ...board, nodes: board.nodes.filter(n => n.id !== id) } }, selectedNodeId: null }); scheduleSave(); },
+        deleteNode: (id) => get().deleteNodes([id]),
+        deleteNodes: (ids) => {
+          const idSet = new Set(ids);
+          if (!idSet.size) return;
+          saveHistory();
+          const { boards, currentBoardId } = get();
+          const board = boards[currentBoardId];
+          if (!board) return;
+          const remaining = board.nodes.filter(n => !idSet.has(n.id));
+          const remainingImageIds = new Set(remaining.filter(n => n.type === 'image' && n.imageId).map(n => n.imageId));
+          [...new Set(board.nodes.filter(n => idSet.has(n.id) && n.type === 'image' && n.imageId).map(n => n.imageId))]
+            .filter(imageId => !remainingImageIds.has(imageId))
+            .forEach(imageId => deleteImageFromDB(imageId).catch(console.error));
+          set({ boards: { ...boards, [currentBoardId]: { ...board, nodes: remaining } }, selectedNodeIds: [] });
+          scheduleSave();
+        },
         updateNodesBatch: (map) => { const { boards, currentBoardId } = get(); const board = boards[currentBoardId]; if (board) { set({ boards: { ...boards, [currentBoardId]: { ...board, nodes: board.nodes.map(n => map.has(n.id) ? { ...n, ...map.get(n.id) } : n) } } }); scheduleSave(); } },
         addPin: (pin) => { saveHistory(); const { boards, currentBoardId } = get(); const board = boards[currentBoardId]; if (board) { set({ boards: { ...boards, [currentBoardId]: { ...board, pins: [...board.pins, pin] } } }); scheduleSave(); } },
         updatePin: (id, updates) => { const { boards, currentBoardId } = get(); const board = boards[currentBoardId]; if (board) { set({ boards: { ...boards, [currentBoardId]: { ...board, pins: board.pins.map(p => p.id === id ? { ...p, ...updates } : p) } } }); scheduleSave(); } },
         deletePin: (id) => { saveHistory(); const { boards, currentBoardId } = get(); const board = boards[currentBoardId]; if (board) { set({ boards: { ...boards, [currentBoardId]: { ...board, pins: board.pins.filter(p => p.id !== id) } } }); scheduleSave(); } },
-        goToPin: (id) => { const { boards, currentBoardId } = get(); const board = boards[currentBoardId]; if (!board) return; const pin = board.pins.find(p => p.id === id); if (!pin) return; const vp = board.viewport; const sw = window.innerWidth, sh = window.innerHeight; set({ boards: { ...boards, [currentBoardId]: { ...board, viewport: { ...vp, x: sw / 2 - pin.x * vp.zoom, y: sh / 2 - pin.y * vp.zoom } } }, pinPanelOpen: false }); },
+        goToPin: (id) => { const { boards, currentBoardId } = get(); const board = boards[currentBoardId]; if (!board) return; const pin = board.pins.find(p => p.id === id); if (!pin) return; const vp = board.viewport; const sw = window.innerWidth, sh = window.innerHeight; set({ boards: { ...boards, [currentBoardId]: { ...board, viewport: { ...vp, x: sw / 2 - pin.x * vp.zoom, y: sh / 2 - pin.y * vp.zoom } } }, pinPanelOpen: false });
+          scheduleSave();
+        },
         setPinPanelOpen: (v) => set({ pinPanelOpen: v }),
-        undo: () => { const { boards, currentBoardId } = get(); const board = boards[currentBoardId]; if (!board || !board.history.past.length) return; const past = [...board.history.past]; const snap = past.pop(); const futureSnap = { nodes: deepClone(board.nodes), pins: deepClone(board.pins) }; set({ boards: { ...boards, [currentBoardId]: { ...board, nodes: snap.nodes, pins: snap.pins, history: { past, future: [futureSnap, ...board.history.future.slice(0, 100)] } } }, selectedNodeId: null }); scheduleSave(); },
-        redo: () => { const { boards, currentBoardId } = get(); const board = boards[currentBoardId]; if (!board || !board.history.future.length) return; const future = [...board.history.future]; const snap = future.shift(); const pastSnap = { nodes: deepClone(board.nodes), pins: deepClone(board.pins) }; set({ boards: { ...boards, [currentBoardId]: { ...board, nodes: snap.nodes, pins: snap.pins, history: { past: [...board.history.past.slice(-100), pastSnap], future } } }, selectedNodeId: null }); scheduleSave(); },
+        undo: () => { const { boards, currentBoardId } = get(); const board = boards[currentBoardId]; if (!board || !board.history.past.length) return; const past = [...board.history.past]; const snap = past.pop(); const futureSnap = { nodes: deepClone(board.nodes), pins: deepClone(board.pins) }; set({ boards: { ...boards, [currentBoardId]: { ...board, nodes: snap.nodes, pins: snap.pins, history: { past, future: [futureSnap, ...board.history.future.slice(0, 100)] } } }, selectedNodeIds: [] }); scheduleSave(); },
+        redo: () => { const { boards, currentBoardId } = get(); const board = boards[currentBoardId]; if (!board || !board.history.future.length) return; const future = [...board.history.future]; const snap = future.shift(); const pastSnap = { nodes: deepClone(board.nodes), pins: deepClone(board.pins) }; set({ boards: { ...boards, [currentBoardId]: { ...board, nodes: snap.nodes, pins: snap.pins, history: { past: [...board.history.past.slice(-100), pastSnap], future } } }, selectedNodeIds: [] }); scheduleSave(); },
         exportBoard: async () => { const { boards, currentBoardId } = get(); const board = boards[currentBoardId]; if (!board) return; const nodes = await Promise.all(board.nodes.map(async n => { if (n.type === 'image' && n.imageId) { const blob = await getImageFromDB(n.imageId); if (blob) { const b64 = await blobToBase64(blob); return { ...n, src: b64 }; } } return n; })); const data = { nodes, pins: board.pins, viewport: board.viewport, name: board.name, version: '3.0' }; const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' }); const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `whiteboard_${board.name || currentBoardId}.json`; a.click(); URL.revokeObjectURL(a.href); },
-        importBoard: async (json) => { try { const data = typeof json === 'string' ? JSON.parse(json) : json; if (!data.nodes?.length) throw new Error('无效'); saveHistory(); const { boards, currentBoardId } = get(); const board = boards[currentBoardId]; if (!board) return false; const nodes = await Promise.all(data.nodes.map(async n => { if (n.type === 'image' && n.src?.startsWith('data:')) { const blob = base64ToBlob(n.src); const cb = await compressImageToWebP(blob); const imgId = n.imageId || genId(); await saveImageToDB(imgId, cb); return { ...n, src: URL.createObjectURL(cb), imageId: imgId }; } return n; })); set({ boards: { ...boards, [currentBoardId]: { ...board, nodes, pins: data.pins || [], viewport: data.viewport || { x: 0, y: 0, zoom: 1 }, history: { past: [], future: [] } } }, selectedNodeId: null }); scheduleSave(); return true; } catch (e) { console.error(e); return false; } },
-        copySelectedNode: () => { const { selectedNodeId, boards, currentBoardId } = get(); if (!selectedNodeId) return; const node = boards[currentBoardId]?.nodes.find(n => n.id === selectedNodeId); if (node) set({ clipboard: deepClone(node) }); },
-        pasteNode: (wx, wy) => { const { clipboard } = get(); if (!clipboard) return; const newNode = { ...deepClone(clipboard), id: genId(), x: wx - (clipboard.width || 100) / 2, y: wy - (clipboard.height || 30) / 2 }; if (newNode.type === 'line' || newNode.type === 'arrow') { const dx = newNode.x - clipboard.x, dy = newNode.y - clipboard.y; newNode.x2 = (clipboard.x2 ?? clipboard.x + (clipboard.width || 0)) + dx; newNode.y2 = (clipboard.y2 ?? clipboard.y + (clipboard.height || 0)) + dy; } get().addNode(newNode); },
+        importBoard: async (json) => { try { const data = typeof json === 'string' ? JSON.parse(json) : json; if (!data.nodes?.length) throw new Error('无效'); saveHistory(); const { boards, currentBoardId } = get(); const board = boards[currentBoardId]; if (!board) return false; const nodes = await Promise.all(data.nodes.map(async n => { if (n.type === 'image' && n.src?.startsWith('data:')) { const blob = base64ToBlob(n.src); const cb = await compressImageToWebP(blob); const imgId = n.imageId || genId(); await saveImageToDB(imgId, cb); return { ...n, src: URL.createObjectURL(cb), imageId: imgId }; } return n; })); set({ boards: { ...boards, [currentBoardId]: { ...board, nodes, pins: data.pins || [], viewport: data.viewport || { x: 0, y: 0, zoom: 1 }, history: { past: [], future: [] } } }, selectedNodeIds: [] }); scheduleSave(); return true; } catch (e) { console.error(e); return false; } },
+        copySelectedNodes: () => { const { selectedNodeIds, boards, currentBoardId } = get(); if (!selectedNodeIds.length) return; const nodes = boards[currentBoardId]?.nodes.filter(n => selectedNodeIds.includes(n.id)); if (nodes?.length) set({ clipboard: nodes.map(deepClone) }); },
+        pasteNodes: async (wx, wy) => {
+          const { clipboard } = get(); if (!clipboard?.length) return;
+          const ref = clipboard[0]; const refCx = ref.x + (ref.width || 100) / 2, refCy = ref.y + (ref.height || 30) / 2; const dx = wx - refCx, dy = wy - refCy;
+          const newNodes = await Promise.all(clipboard.map(async n => {
+            const nn = { ...deepClone(n), id: genId(), x: n.x + dx, y: n.y + dy };
+            if (nn.type === 'line' || nn.type === 'arrow') { nn.x2 = (n.x2 ?? n.x + (n.width || 0)) + dx; nn.y2 = (n.y2 ?? n.y + (n.height || 0)) + dy; }
+            if (nn.type === 'image' && nn.imageId) {
+              const blob = await getNodeImageBlob(n);
+              if (blob) {
+                const imageId = genId();
+                await saveImageToDB(imageId, blob);
+                nn.imageId = imageId;
+                nn.src = URL.createObjectURL(blob);
+              }
+            }
+            return nn;
+          }));
+          get().addNodes(newNodes);
+        },
         startDrag: (type, data) => set({ dragging: { type, ...data } }),
         updateDrag: (upd) => set(s => s.dragging ? { dragging: { ...s.dragging, ...upd } } : {}),
         endDrag: () => {
           const { dragging, boards, currentBoardId } = get();
           if (!dragging) return;
-          if (dragging.type === 'node' && dragging.nodeId && dragging.didMove) {
+          if (dragging.type === 'marquee' && dragging.endWorldX !== undefined) {
             const board = boards[currentBoardId];
             if (board) {
-              const snap = { nodes: deepClone(board.nodes), pins: deepClone(board.pins) };
+              const x = Math.min(dragging.startWorldX, dragging.endWorldX), y = Math.min(dragging.startWorldY, dragging.endWorldY);
+              const w = Math.abs(dragging.endWorldX - dragging.startWorldX), h = Math.abs(dragging.endWorldY - dragging.startWorldY);
+              const ids = board.nodes.filter(n => {
+                const b = getNodeBounds(n);
+                return b.x < x + w && b.x + b.width > x && b.y < y + h && b.y + b.height > y;
+              }).map(n => n.id);
+              const base = dragging.additive ? get().selectedNodeIds : [];
+              set({ dragging: null, shapePreview: null, selectedNodeIds: [...new Set([...base, ...ids])], editingNodeId: null });
+            } else set({ dragging: null, shapePreview: null });
+            return;
+          }
+          if ((dragging.type === 'node' && dragging.nodeId && dragging.didMove) || (dragging.type === 'multi' && dragging.originals?.length && dragging.didMove)) {
+            const board = boards[currentBoardId];
+            if (board) {
+              const snap = dragging.startSnapshot || { nodes: deepClone(board.nodes), pins: deepClone(board.pins) };
               set({ dragging: null, boards: { ...boards, [currentBoardId]: { ...board, history: { ...board.history, past: [...board.history.past.slice(-100), snap], future: [] } } } });
               scheduleSave();
               return;
@@ -383,7 +609,7 @@
           if (dragging.type === 'pin' && dragging.pinId && dragging.didMove) {
             const board = boards[currentBoardId];
             if (board) {
-              const snap = { nodes: deepClone(board.nodes), pins: deepClone(board.pins) };
+              const snap = dragging.startSnapshot || { nodes: deepClone(board.nodes), pins: deepClone(board.pins) };
               set({ dragging: null, boards: { ...boards, [currentBoardId]: { ...board, history: { ...board.history, past: [...board.history.past.slice(-100), snap], future: [] } } } });
               scheduleSave();
               return;
@@ -401,9 +627,13 @@
         },
         setShapePreview: (p) => set({ shapePreview: p }),
         setShowMinimap: (v) => set({ showMinimap: v }),
-        startResizing: (nodeId, handle, startPos, nodePos, nodeDim) => set({
-          resizing: { nodeId, handle, startMouseX: startPos.x, startMouseY: startPos.y, startX: nodePos.x, startY: nodePos.y, startWidth: nodeDim.width, startHeight: nodeDim.height, aspectRatio: nodeDim.aspectRatio }
-        }),
+        startResizing: (nodeId, handle, startPos, nodePos, nodeDim) => {
+          const { boards, currentBoardId } = get();
+          const board = boards[currentBoardId];
+          set({
+            resizing: { nodeId, handle, startMouseX: startPos.x, startMouseY: startPos.y, startX: nodePos.x, startY: nodePos.y, startWidth: nodeDim.width, startHeight: nodeDim.height, aspectRatio: nodeDim.aspectRatio, historySnapshot: board ? deepClone({ nodes: board.nodes, pins: board.pins }) : null }
+          });
+        },
         updateResizing: (mouseX, mouseY, maintainRatio) => {
           const { resizing, boards, currentBoardId } = get();
           if (!resizing) return;
@@ -440,7 +670,7 @@
           if (!resizing) return;
           const board = boards[currentBoardId];
           if (board) {
-            const snap = { nodes: deepClone(board.nodes), pins: deepClone(board.pins) };
+            const snap = resizing.historySnapshot || { nodes: deepClone(board.nodes), pins: deepClone(board.pins) };
             set({ resizing: null, boards: { ...boards, [currentBoardId]: { ...board, history: { ...board.history, past: [...board.history.past.slice(-100), snap], future: [] } } } });
             scheduleSave();
           } else set({ resizing: null });
@@ -448,7 +678,7 @@
       };
     });
 
-    function useImageLoader() {
+function useImageLoader() {
       const updateNode = useStore(s => s.updateNode);
       React.useEffect(() => {
         let cancelled = false;
@@ -485,7 +715,7 @@
       const nodes = useStore(s => s.boards[s.currentBoardId]?.nodes || []);
       const node = nodes.find(n => n.id === nodeId);
       if (!node || node.type === 'line' || node.type === 'arrow') return null;
-      const handles = ['nw', 'n', 'ne', 'e', 'se', 's', 'sw', 'w'];
+      const handles = node.type === 'image' ? ['nw', 'ne', 'se', 'sw'] : ['nw', 'n', 'ne', 'e', 'se', 's', 'sw', 'w'];
       const getStyle = (h) => {
         const base = { position: 'absolute', width: 10, height: 10, background: '#007acc', border: '1px solid white', borderRadius: 1, zIndex: 20 };
         switch (h) {
@@ -550,8 +780,8 @@
       </div>;
     }
 
-    function NodeRenderer({ node, isSelected, isEditing, onNodeMouseDown, onNodeDoubleClick }) {
-      const Wrapper = ({ children }) => <div style={{ position: 'relative', width: '100%', height: '100%' }}>{children}{isSelected && <ResizeHandles nodeId={node.id} />}</div>;
+    function NodeRenderer({ node, isSelected, isEditing, showResizeHandles, onNodeMouseDown, onNodeDoubleClick }) {
+      const Wrapper = ({ children }) => <div style={{ position: 'relative', width: '100%', height: '100%' }}>{children}{isSelected && showResizeHandles && <ResizeHandles nodeId={node.id} />}</div>;
       switch (node.type) {
         case 'text': return <Wrapper><TextNode node={node} isSelected={isSelected} isEditing={isEditing} onNodeMouseDown={onNodeMouseDown} onNodeDoubleClick={onNodeDoubleClick} /></Wrapper>;
         case 'image': return <Wrapper><ImageNode node={node} isSelected={isSelected} onNodeMouseDown={onNodeMouseDown} /></Wrapper>;
@@ -584,8 +814,68 @@
     function StatusBar({ vp, nodesCount, pinsCount }) {
       return <>
         <div className="fixed bottom-2 left-2 z-40 px-2 py-1 rounded text-xs pointer-events-none select-none" style={{ background: 'rgba(30,30,30,0.8)', color: '#858585', border: '1px solid rgba(255,255,255,0.06)' }}>{Math.round(vp.zoom * 100)}% · {nodesCount}元素 · {pinsCount}图钉</div>
-        <div className="fixed bottom-2 left-1/2 -translate-x-1/2 z-40 px-2 py-1 rounded text-xs pointer-events-none select-none opacity-50" style={{ color: '#858585' }}>拖拽平移 · 滚轮缩放 · 双击创建文字 · Ctrl+V粘贴 · 拖入图片</div>
+        <div className="fixed bottom-2 left-1/2 -translate-x-1/2 z-40 px-2 py-1 rounded text-xs pointer-events-none select-none opacity-50" style={{ color: '#858585' }}>拖拽平移 · Ctrl+拖拽多选 · 右键图片操作 · Ctrl+V粘贴 · 拖入图片</div>
       </>;
+    }
+
+    function ContextMenuItem({ icon: Icon, label, onClick, danger, busy }) {
+      return (
+        <button disabled={busy} onClick={onClick} className="w-full flex items-center gap-2 px-3 py-1.5 text-xs cursor-pointer text-left hover:bg-[#3c3c3c] disabled:opacity-50" style={{ background: 'transparent', border: 'none', color: danger ? '#e06c75' : '#cccccc' }}>
+          {Icon && <Icon size={14} />}{label}
+        </button>
+      );
+    }
+
+    function ContextMenu({ menu, onClose }) {
+      const boards = useStore(s => s.boards);
+      const currentBoardId = useStore(s => s.currentBoardId);
+      const updateNode = useStore(s => s.updateNode);
+      const updateNodesBatch = useStore(s => s.updateNodesBatch);
+      const saveHistory = useStore(s => s.saveHistory);
+      const copySelectedNodes = useStore(s => s.copySelectedNodes);
+      const deleteNodes = useStore(s => s.deleteNodes);
+      const board = boards[currentBoardId];
+      const vp = board?.viewport || { x: 0, y: 0, zoom: 1 };
+      const selectedNodes = (board?.nodes || []).filter(n => menu.nodeIds.includes(n.id));
+      const single = selectedNodes.length === 1 ? selectedNodes[0] : null;
+      const [busy, setBusy] = React.useState(false);
+
+      const run = async (fn) => {
+        setBusy(true);
+        try { await fn(); } catch (e) { console.error(e); alert(e?.message || '操作失败'); }
+        finally { setBusy(false); onClose(); }
+      };
+      const applyLayout = updates => { if (updates.size) { saveHistory(); updateNodesBatch(updates); } };
+      const copyImage = async () => { if (single?.type === 'image') await copyImageToClipboard(single); };
+      const resetImageScale = async () => {
+        if (!single) return;
+        const img = await getNodeImageElement(single);
+        saveHistory();
+        updateNode(single.id, { width: single.originalWidth || img.naturalWidth || img.width, height: single.originalHeight || img.naturalHeight || img.height });
+      };
+      const download = async (mime, ext) => { if (single) await downloadNodeImage(single, mime, ext); };
+
+      return (
+        <div className="wb-context-menu fixed z-[10000] min-w-[176px] py-1 rounded-lg border shadow-2xl" style={{ left: menu.x, top: menu.y, background: '#2a2a2d', borderColor: '#3e3e3e' }} onPointerDown={e => e.stopPropagation()} onMouseDown={e => e.stopPropagation()} onClick={e => e.stopPropagation()} onDoubleClick={e => e.stopPropagation()} onContextMenu={e => e.stopPropagation()}>
+          {single?.type === 'image' && <>
+            <ContextMenuItem icon={Copy} label="复制图片到剪贴板" busy={busy} onClick={() => run(copyImage)} />
+            <ContextMenuItem icon={RotateCcw} label="重置缩放" busy={busy} onClick={() => run(resetImageScale)} />
+            <div className="h-px my-1" style={{ background: '#3e3e3e' }} />
+            <ContextMenuItem icon={Download} label="下载 WebP" busy={busy} onClick={() => run(() => download('image/webp', 'webp'))} />
+            <ContextMenuItem icon={Download} label="下载 PNG" busy={busy} onClick={() => run(() => download('image/png', 'png'))} />
+            <ContextMenuItem icon={Download} label="下载 JPEG" busy={busy} onClick={() => run(() => download('image/jpeg', 'jpg'))} />
+            <div className="h-px my-1" style={{ background: '#3e3e3e' }} />
+          </>}
+          {menu.nodeIds.length > 1 && <>
+            <ContextMenuItem icon={LayoutGrid} label="自动排版" busy={busy} onClick={() => run(() => applyLayout(computeAutoLayout(selectedNodes, window.innerWidth / vp.zoom, window.innerHeight / vp.zoom)))} />
+            <ContextMenuItem icon={AlignLeft} label="左对齐（不重叠）" busy={busy} onClick={() => run(() => applyLayout(computeAlignment(selectedNodes, 'left')))} />
+            <ContextMenuItem icon={AlignRight} label="右对齐（不重叠）" busy={busy} onClick={() => run(() => applyLayout(computeAlignment(selectedNodes, 'right')))} />
+            <div className="h-px my-1" style={{ background: '#3e3e3e' }} />
+          </>}
+          <ContextMenuItem icon={Copy} label="复制选中节点" busy={busy} onClick={() => run(copySelectedNodes)} />
+          <ContextMenuItem icon={Trash2} label="删除" danger busy={busy} onClick={() => run(() => deleteNodes(menu.nodeIds))} />
+        </div>
+      );
     }
 
     function BoardListPage() {
@@ -644,8 +934,8 @@
     function Toolbar() {
       const tool = useStore(s => s.tool);
       const setTool = useStore(s => s.setTool);
-      const selectedNodeId = useStore(s => s.selectedNodeId);
-      const deleteNode = useStore(s => s.deleteNode);
+      const selectedNodeIds = useStore(s => s.selectedNodeIds);
+      const deleteNodes = useStore(s => s.deleteNodes);
       const undo = useStore(s => s.undo);
       const redo = useStore(s => s.redo);
       const exportBoard = useStore(s => s.exportBoard);
@@ -685,10 +975,11 @@
                 <Tooltip.Root key={t.value}><Tooltip.Trigger asChild><ToggleGroup.Item value={t.value} className="toggle-group-item p-1.5 rounded transition-all flex items-center justify-center border-none"><t.icon size={15} /></ToggleGroup.Item></Tooltip.Trigger><Tooltip.Portal><Tooltip.Content className="px-2 py-1 text-xs rounded shadow border" style={{ background: '#333', color: '#ddd', borderColor: '#555' }} sideOffset={6}>{t.label}<Tooltip.Arrow style={{ fill: '#333' }} /></Tooltip.Content></Tooltip.Portal></Tooltip.Root>
               ))}
             </ToggleGroup.Root>
+            <div className="text-xs select-none" style={{ color: '#858585', minWidth: 84 }}>{toolItems.find(t => t.value === tool)?.label}</div>
             <div className="w-px h-4 mx-1" style={{ background: '#3e3e3e' }} />
             <ToolbarButton onClick={undo} disabled={!canUndo} title="撤销 Ctrl+Z"><Undo2 size={15} /></ToolbarButton>
             <ToolbarButton onClick={redo} disabled={!canRedo} title="重做 Ctrl+Shift+Z"><Redo2 size={15} /></ToolbarButton>
-            {selectedNodeId && <><div className="w-px h-4 mx-1" style={{ background: '#3e3e3e' }} /><ToolbarButton onClick={() => deleteNode(selectedNodeId)} title="删除 Delete" active activeColor="#e06c75"><Trash2 size={15} /></ToolbarButton></>}
+            {selectedNodeIds.length > 0 && <><div className="w-px h-4 mx-1" style={{ background: '#3e3e3e' }} /><ToolbarButton onClick={() => deleteNodes(selectedNodeIds)} title="删除 Delete" active activeColor="#e06c75"><Trash2 size={15} /></ToolbarButton></>}
             <div className="w-px h-4 mx-1" style={{ background: '#3e3e3e' }} />
             <ToolbarButton onClick={exportBoard} title="导出 JSON"><Download size={15} /></ToolbarButton>
             <ToolbarButton onClick={handleImport} title="导入 JSON"><Upload size={15} /></ToolbarButton>
@@ -748,10 +1039,11 @@
       </div>;
     }
 
-    function Canvas() {
+function Canvas() {
       const boards = useStore(s => s.boards);
       const currentBoardId = useStore(s => s.currentBoardId);
-      const selectedNodeId = useStore(s => s.selectedNodeId);
+      const selectedNodeIds = useStore(s => s.selectedNodeIds);
+      const setSelectedNodes = useStore(s => s.setSelectedNodes);
       const tool = useStore(s => s.tool);
       const dragging = useStore(s => s.dragging);
       const editingNodeId = useStore(s => s.editingNodeId);
@@ -759,7 +1051,6 @@
       const resizing = useStore(s => s.resizing);
       const setViewport = useStore(s => s.setViewport);
       const zoomAt = useStore(s => s.zoomAt);
-      const selectNode = useStore(s => s.selectNode);
       const deselectAll = useStore(s => s.deselectAll);
       const stopEditingNode = useStore(s => s.stopEditingNode);
       const startEditingNode = useStore(s => s.startEditingNode);
@@ -773,20 +1064,41 @@
       const setShapePreview = useStore(s => s.setShapePreview);
       const updateResizing = useStore(s => s.updateResizing);
       const endResizing = useStore(s => s.endResizing);
-      const copySelectedNode = useStore(s => s.copySelectedNode);
-      const pasteNode = useStore(s => s.pasteNode);
+      const copySelectedNodes = useStore(s => s.copySelectedNodes);
+      const pasteNodes = useStore(s => s.pasteNodes);
+      const updateNodesBatch = useStore(s => s.updateNodesBatch);
+      const saveHistory = useStore(s => s.saveHistory);
       const undo = useStore(s => s.undo);
       const redo = useStore(s => s.redo);
       const setTool = useStore(s => s.setTool);
-      const deleteNode = useStore(s => s.deleteNode);
+      const deleteNodes = useStore(s => s.deleteNodes);
       const setPinPanelOpen = useStore(s => s.setPinPanelOpen);
 
       const board = boards[currentBoardId];
       const nodes = board?.nodes || [], pins = board?.pins || [], vp = board?.viewport || { x: 0, y: 0, zoom: 1 };
       const canvasRef = React.useRef(null);
+      const [marqueeRect, setMarqueeRect] = React.useState(null);
+      const [contextMenu, setContextMenu] = React.useState(null);
       const sortedNodes = React.useMemo(() => { const rects = nodes.filter(n => n.type === 'rectangle'); return [...rects, ...nodes.filter(n => n.type !== 'rectangle')]; }, [nodes]);
       const screenToWorld = React.useCallback((sx, sy) => { const r = canvasRef.current?.getBoundingClientRect(); return { wx: ((r ? sx - r.left : sx) - vp.x) / vp.zoom, wy: ((r ? sy - r.top : sy) - vp.y) / vp.zoom }; }, [vp.x, vp.y, vp.zoom]);
       const isNodeInsideRect = (node, rect) => { if (node.type === 'rectangle') return false; const cx = node.x + (node.width || 60) / 2, cy = node.y + (node.height || 30) / 2; return cx >= rect.x && cx <= rect.x + (rect.width || 120) && cy >= rect.y && cy <= rect.y + (rect.height || 90); };
+
+      const beginNodeDrag = React.useCallback((nodeId, e) => {
+        if (tool !== 'select' || editingNodeId) return false;
+        const node = nodes.find(n => n.id === nodeId);
+        if (!node) return false;
+        const currentIds = useStore.getState().selectedNodeIds;
+        let nextIds = currentIds;
+        if (!currentIds.includes(nodeId)) nextIds = (e.ctrlKey || e.metaKey) ? [...currentIds, nodeId] : [nodeId];
+        if (nextIds !== currentIds) setSelectedNodes(nextIds);
+        const { wx, wy } = screenToWorld(e.clientX, e.clientY);
+        const originals = nextIds.map(id => { const n = nodes.find(nn => nn.id === id); return n ? { id, x: n.x, y: n.y, x2: n.x2, y2: n.y2 } : null; }).filter(Boolean);
+        if (node.type === 'rectangle') {
+          nodes.filter(n => n.id !== nodeId && isNodeInsideRect(n, node) && !nextIds.includes(n.id)).forEach(n => originals.push({ id: n.id, x: n.x, y: n.y, x2: n.x2, y2: n.y2 }));
+        }
+        startDrag('multi', { originals, startWx: wx, startWy: wy, didMove: false, startSnapshot: deepClone({ nodes, pins }) });
+        return true;
+      }, [tool, editingNodeId, nodes, pins, screenToWorld]);
 
       const handleDragOver = e => { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; };
       const handleDrop = async e => {
@@ -795,15 +1107,7 @@
         if (!files.length) return;
         const { wx, wy } = screenToWorld(e.clientX, e.clientY);
         for (const file of files) {
-          try {
-            const cb = await compressImageToWebP(file);
-            const imgId = genId();
-            await saveImageToDB(imgId, cb);
-            const url = URL.createObjectURL(cb);
-            const img = new Image();
-            img.onload = () => { const ratio = Math.min(1, 360 / img.width); addNode({ id: genId(), type: 'image', x: wx - (img.width * ratio) / 2, y: wy - (img.height * ratio) / 2, width: img.width * ratio, height: img.height * ratio, src: url, imageId: imgId }); };
-            img.src = url;
-          } catch (err) { console.error(err); }
+          try { await addImageNodeFromBlob(file, wx, wy); } catch (err) { console.error(err); }
         }
       };
 
@@ -815,7 +1119,7 @@
           e.stopPropagation();
           const pinId = pinEl.getAttribute('data-pin-id');
           const pin = pins.find(p => p.id === pinId);
-          if (pin && tool === 'select') { const { wx, wy } = screenToWorld(e.clientX, e.clientY); startDrag('pin', { pinId, offsetX: wx - pin.x, offsetY: wy - pin.y, startX: pin.x, startY: pin.y, didMove: false }); return; }
+          if (pin && tool === 'select') { const { wx, wy } = screenToWorld(e.clientX, e.clientY); startDrag('pin', { pinId, offsetX: wx - pin.x, offsetY: wy - pin.y, startX: pin.x, startY: pin.y, didMove: false, startSnapshot: deepClone({ nodes, pins }) }); return; }
         }
         if (e.target.closest('.resize-handle')) return;
         const { wx, wy } = screenToWorld(e.clientX, e.clientY);
@@ -823,25 +1127,40 @@
         const nodeId = targetNodeEl?.getAttribute('data-node-id');
         if (tool === 'select') {
           if (nodeId && !editingNodeId) {
-            selectNode(nodeId);
-            const node = nodes.find(n => n.id === nodeId);
-            if (node) {
-              const contained = node.type === 'rectangle' ? nodes.filter(n => n.id !== nodeId && isNodeInsideRect(n, node)).map(n => ({ id: n.id, origX: n.x, origY: n.y })) : [];
-              startDrag('node', { nodeId, offsetX: wx - node.x, offsetY: wy - node.y, startX: node.x, startY: node.y, didMove: false, containedNodes: contained, origRectX: node.x, origRectY: node.y });
-            }
+            beginNodeDrag(nodeId, e);
+          } else if (!nodeId && !editingNodeId && (e.ctrlKey || e.metaKey)) {
+            startDrag('marquee', { startWorldX: wx, startWorldY: wy, endWorldX: wx, endWorldY: wy, additive: true });
+            setMarqueeRect({ x: wx, y: wy, width: 0, height: 0 });
           } else if (!nodeId && !editingNodeId) { deselectAll(); stopEditingNode(); startDrag('canvas', { startX: e.clientX, startY: e.clientY, vpX: vp.x, vpY: vp.y }); }
         } else if (tool === 'pin') {
           if (!nodeId && !pinEl) { const pid = genId(); addPin({ id: pid, x: wx, y: wy, label: `图钉 ${pins.length + 1}` }); setPinPanelOpen(true); }
         } else if (['rectangle', 'line', 'arrow'].includes(tool)) {
           if (!nodeId && !pinEl) { startDrag('shape', { shapeType: tool, startWorldX: wx, startWorldY: wy }); setShapePreview({ type: tool, x: wx, y: wy, w: 0, h: 0, startX: wx, startY: wy, endX: wx, endY: wy }); }
         }
-      }, [tool, screenToWorld, nodes, pins, editingNodeId, resizing]);
+      }, [tool, screenToWorld, nodes, pins, editingNodeId, resizing, beginNodeDrag]);
 
       const handleMouseMove = React.useCallback(e => {
         if (resizing) { const node = nodes.find(n => n.id === resizing.nodeId); updateResizing(e.clientX, e.clientY, node?.type === 'image' ? true : !e.shiftKey); return; }
         if (!dragging) return;
         if (dragging.type === 'canvas') setViewport({ x: dragging.vpX + e.clientX - dragging.startX, y: dragging.vpY + e.clientY - dragging.startY });
-        else if (dragging.type === 'node' && dragging.nodeId) {
+        else if (dragging.type === 'marquee') {
+          const { wx, wy } = screenToWorld(e.clientX, e.clientY);
+          const x = Math.min(dragging.startWorldX, wx), y = Math.min(dragging.startWorldY, wy);
+          setMarqueeRect({ x, y, width: Math.abs(wx - dragging.startWorldX), height: Math.abs(wy - dragging.startWorldY) });
+          updateDrag({ endWorldX: wx, endWorldY: wy, didMove: true });
+        } else if (dragging.type === 'multi' && dragging.originals?.length) {
+          const { wx, wy } = screenToWorld(e.clientX, e.clientY);
+          const dx = wx - dragging.startWx, dy = wy - dragging.startWy;
+          updateDrag({ didMove: Math.abs(dx) > 1 || Math.abs(dy) > 1 });
+          const map = new Map();
+          dragging.originals.forEach(o => {
+            const n = nodes.find(nn => nn.id === o.id);
+            if (!n) return;
+            if (n.type === 'line' || n.type === 'arrow') map.set(o.id, { x: o.x + dx, y: o.y + dy, x2: (o.x2 ?? o.x + (n.width || 0)) + dx, y2: (o.y2 ?? o.y + (n.height || 0)) + dy });
+            else map.set(o.id, { x: o.x + dx, y: o.y + dy });
+          });
+          if (map.size) updateNodesBatch(map);
+        } else if (dragging.type === 'node' && dragging.nodeId) {
           const { wx, wy } = screenToWorld(e.clientX, e.clientY);
           const nx = wx - dragging.offsetX, ny = wy - dragging.offsetY;
           updateDrag({ didMove: Math.abs(nx - dragging.startX) > 1 || Math.abs(ny - dragging.startY) > 1 });
@@ -858,9 +1177,12 @@
           }
         } else if (dragging.type === 'pin') { const { wx, wy } = screenToWorld(e.clientX, e.clientY); updatePin(dragging.pinId, { x: wx - dragging.offsetX, y: wy - dragging.offsetY }); updateDrag({ didMove: true }); }
         else if (dragging.type === 'shape') { const { wx, wy } = screenToWorld(e.clientX, e.clientY); setShapePreview({ type: dragging.shapeType, x: Math.min(dragging.startWorldX, wx), y: Math.min(dragging.startWorldY, wy), w: Math.abs(wx - dragging.startWorldX), h: Math.abs(wy - dragging.startWorldY), startX: dragging.startWorldX, startY: dragging.startWorldY, endX: wx, endY: wy }); updateDrag({ endWorldX: wx, endWorldY: wy }); }
-      }, [dragging, resizing, nodes]);
+      }, [dragging, resizing, nodes, screenToWorld, updateNodesBatch]);
 
-      const handleMouseUp = React.useCallback(() => { if (resizing) endResizing(); else if (dragging) endDrag(); }, [dragging, resizing]);
+      const handleMouseUp = React.useCallback(() => {
+        setMarqueeRect(null);
+        if (resizing) endResizing(); else if (dragging) endDrag();
+      }, [dragging, resizing]);
 
       const handleDoubleClick = React.useCallback(e => {
         const targetNodeEl = e.target.closest('[data-node-id]');
@@ -880,15 +1202,44 @@
       }, [nodes, tool, screenToWorld]);
 
       const handleNodeMouseDown = React.useCallback((nodeId, e) => {
-        if (tool !== 'select' || editingNodeId) return;
         e.stopPropagation();
+        beginNodeDrag(nodeId, e);
+      }, [beginNodeDrag]);
+
+      const handleContextMenu = React.useCallback(e => {
+        e.preventDefault();
+        const el = e.target.closest('[data-node-id]');
+        if (!el) { setContextMenu(null); return; }
+        const nodeId = el.getAttribute('data-node-id');
         const node = nodes.find(n => n.id === nodeId);
         if (!node) return;
-        const { wx, wy } = screenToWorld(e.clientX, e.clientY);
-        selectNode(nodeId);
-        const contained = node.type === 'rectangle' ? nodes.filter(n => n.id !== nodeId && isNodeInsideRect(n, node)).map(n => ({ id: n.id, origX: n.x, origY: n.y })) : [];
-        startDrag('node', { nodeId, offsetX: wx - node.x, offsetY: wy - node.y, startX: node.x, startY: node.y, didMove: false, containedNodes: contained, origRectX: node.x, origRectY: node.y });
-      }, [tool, editingNodeId, nodes, screenToWorld]);
+        const currentIds = useStore.getState().selectedNodeIds;
+        let ids = currentIds.includes(nodeId) ? currentIds : [nodeId];
+        if ((e.ctrlKey || e.metaKey) && !currentIds.includes(nodeId)) ids = [...currentIds, nodeId];
+        if (!currentIds.includes(nodeId)) setSelectedNodes(ids);
+        setContextMenu({
+          x: Math.max(8, Math.min(e.clientX, window.innerWidth - 190)),
+          y: Math.max(8, Math.min(e.clientY, window.innerHeight - 250)),
+          nodeIds: ids
+        });
+      }, [nodes]);
+
+      React.useEffect(() => {
+        if (!contextMenu) return;
+        const close = e => { if (!e.target.closest('.wb-context-menu')) setContextMenu(null); };
+        const esc = e => { if (e.key === 'Escape') setContextMenu(null); };
+        const wheel = () => setContextMenu(null);
+        window.addEventListener('pointerdown', close, true);
+        window.addEventListener('contextmenu', close, true);
+        window.addEventListener('keydown', esc);
+        window.addEventListener('wheel', wheel, { passive: true });
+        return () => {
+          window.removeEventListener('pointerdown', close, true);
+          window.removeEventListener('contextmenu', close, true);
+          window.removeEventListener('keydown', esc);
+          window.removeEventListener('wheel', wheel);
+        };
+      }, [contextMenu]);
 
       const handleWheel = React.useCallback(e => { e.preventDefault(); zoomAt(e.clientX, e.clientY, e.deltaY < 0 ? 1 : -1); }, [zoomAt]);
 
@@ -903,13 +1254,7 @@
             const blob = item.getAsFile();
             if (blob) {
               try {
-                const cb = await compressImageToWebP(blob);
-                const imgId = genId();
-                await saveImageToDB(imgId, cb);
-                const url = URL.createObjectURL(cb);
-                const img = new Image();
-                img.onload = () => { const ratio = Math.min(1, 360 / img.width); addNode({ id: genId(), type: 'image', x: wx - (img.width * ratio) / 2, y: wy - (img.height * ratio) / 2, width: img.width * ratio, height: img.height * ratio, src: url, imageId: imgId }); };
-                img.src = url;
+                await addImageNodeFromBlob(blob, wx, wy);
                 handled = true;
               } catch (err) { console.error(err); }
             }
@@ -925,30 +1270,35 @@
         const handler = e => {
           if (document.activeElement?.contentEditable === 'true' || document.activeElement?.tagName === 'INPUT' || document.activeElement?.tagName === 'TEXTAREA') return;
           const ctrl = e.ctrlKey || e.metaKey;
-          if (e.key === 'Delete' || e.key === 'Backspace') { const sid = useStore.getState().selectedNodeId; if (sid) { e.preventDefault(); deleteNode(sid); } }
+          if (e.key === 'Delete' || e.key === 'Backspace') { const ids = useStore.getState().selectedNodeIds; if (ids.length) { e.preventDefault(); deleteNodes(ids); } }
           else if (ctrl && e.key === 'z' && !e.shiftKey) { e.preventDefault(); undo(); }
           else if (ctrl && e.key === 'z' && e.shiftKey) { e.preventDefault(); redo(); }
-          else if (ctrl && e.key === 'c') { e.preventDefault(); copySelectedNode(); }
-          else if (ctrl && e.key === 'v') { const { wx, wy } = screenToWorld(window.innerWidth / 2, window.innerHeight / 2); pasteNode(wx, wy); }
+          else if (ctrl && e.key === 'c') { e.preventDefault(); copySelectedNodes(); }
+          else if (ctrl && e.key === 'v') { const { wx, wy } = screenToWorld(window.innerWidth / 2, window.innerHeight / 2); pasteNodes(wx, wy); }
           else if (e.key === 'v' && !ctrl) setTool('select');
           else if (e.key === 'r' && !ctrl) setTool('rectangle');
           else if (e.key === 'l' && !ctrl) setTool('line');
           else if (e.key === 'a' && !ctrl) setTool('arrow');
           else if (e.key === 'p' && !ctrl) setTool('pin');
-          else if (e.key === 'Escape') { deselectAll(); stopEditingNode(); setTool('select'); }
+          else if (e.key === 'Escape') { setContextMenu(null); deselectAll(); stopEditingNode(); setTool('select'); }
         };
         window.addEventListener('keydown', handler);
         return () => window.removeEventListener('keydown', handler);
-      }, []);
+      }, [screenToWorld, deleteNodes, copySelectedNodes, pasteNodes, undo, redo, setTool, deselectAll, stopEditingNode]);
 
       return (
-        <div ref={canvasRef} className="dot-bg absolute inset-0" style={{ backgroundSize: `${22 * vp.zoom}px ${22 * vp.zoom}px`, backgroundPosition: `${vp.x}px ${vp.y}px` }} onMouseDown={handleMouseDown} onMouseMove={handleMouseMove} onMouseUp={handleMouseUp} onMouseLeave={handleMouseUp} onDoubleClick={handleDoubleClick} onWheel={handleWheel} onPaste={handlePaste} onDragOver={handleDragOver} onDrop={handleDrop} tabIndex={0}>
+        <div ref={canvasRef} className="dot-bg absolute inset-0" style={{ backgroundSize: `${22 * vp.zoom}px ${22 * vp.zoom}px`, backgroundPosition: `${vp.x}px ${vp.y}px`, cursor: tool === 'select' ? 'default' : 'crosshair' }} onMouseDown={handleMouseDown} onMouseMove={handleMouseMove} onMouseUp={handleMouseUp} onMouseLeave={handleMouseUp} onDoubleClick={handleDoubleClick} onContextMenu={handleContextMenu} onWheel={handleWheel} onPaste={handlePaste} onDragOver={handleDragOver} onDrop={handleDrop} tabIndex={0}>
           <div style={{ position: 'absolute', left: 0, top: 0, transform: `translate(${vp.x}px,${vp.y}px) scale(${vp.zoom})`, transformOrigin: '0 0', width: 0, height: 0 }}>
-            {sortedNodes.map(node => <div key={node.id} data-node-id={node.id} style={{ position: 'absolute', left: node.x, top: node.y, zIndex: node.type === 'rectangle' ? 1 : 10 }}><NodeRenderer node={node} isSelected={selectedNodeId === node.id} isEditing={editingNodeId === node.id} onNodeMouseDown={handleNodeMouseDown} onNodeDoubleClick={nid => { const n = nodes.find(nn => nn.id === nid); if (n?.type === 'text') startEditingNode(nid); else if (n?.type === 'iframe') { const u = prompt('iframe URL:', n.url || 'https://'); if (u !== null && u.trim()) updateNode(nid, { url: u.trim() }); } }} /></div>)}
+            {sortedNodes.map(node => {
+              const nb = getNodeBounds(node);
+              return <div key={node.id} data-node-id={node.id} style={{ position: 'absolute', left: node.x, top: node.y, width: nb.width, height: nb.height, zIndex: node.type === 'rectangle' ? 1 : 10 }}><NodeRenderer node={node} isSelected={selectedNodeIds.includes(node.id)} showResizeHandles={selectedNodeIds.length === 1} isEditing={editingNodeId === node.id} onNodeMouseDown={handleNodeMouseDown} onNodeDoubleClick={nid => { const n = nodes.find(nn => nn.id === nid); if (n?.type === 'text') startEditingNode(nid); else if (n?.type === 'iframe') { const u = prompt('iframe URL:', n.url || 'https://'); if (u !== null && u.trim()) updateNode(nid, { url: u.trim() }); } }} /></div>;
+            })}
             <ShapePreview preview={shapePreview} />
+            {marqueeRect && <div style={{ position: 'absolute', left: marqueeRect.x, top: marqueeRect.y, width: marqueeRect.width, height: marqueeRect.height, border: '1px dashed #007acc', background: 'rgba(0,122,204,0.12)', pointerEvents: 'none', zIndex: 9998 }} />}
             {pins.map(pin => <PinMarker key={pin.id} pin={pin} tool={tool} onMouseDown={handleMouseDown} />)}
           </div>
           <StatusBar vp={vp} nodesCount={nodes.length} pinsCount={pins.length} />
+          {contextMenu && <ContextMenu menu={contextMenu} onClose={() => setContextMenu(null)} />}
         </div>
       );
     }
@@ -965,7 +1315,7 @@
       </div>;
     }
 
-    function App() {
+function App() {
       const view = useStore(s => s.view);
       if (view === 'board-list') return <BoardListPage />;
       return <CanvasView />;
