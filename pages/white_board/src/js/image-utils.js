@@ -70,6 +70,7 @@
 
 async function addImageNodeFromBlob(blob, wx, wy) {
       const originalUrl = URL.createObjectURL(blob);
+      let committed = false;
       try {
         const img = await loadImageElement(originalUrl);
         const originalWidth = img.naturalWidth || img.width;
@@ -86,10 +87,11 @@ async function addImageNodeFromBlob(blob, wx, wy) {
           height: originalHeight,
           originalWidth,
           originalHeight,
-          src: URL.createObjectURL(cb),
+          src: originalUrl,
           imageId,
         });
+        committed = true;
       } finally {
-        URL.revokeObjectURL(originalUrl);
+        if (!committed) URL.revokeObjectURL(originalUrl);
       }
     }
