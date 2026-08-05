@@ -2,10 +2,9 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const scriptDir = dirname(fileURLToPath(import.meta.url));
-const rootDir = join(scriptDir, '..');
-const srcDir = join(rootDir, 'pages', 'white_board', 'src');
-const outFile = join(rootDir, 'pages', 'white_board', 'index.html');
+const pageDir = dirname(fileURLToPath(import.meta.url));
+const srcDir = join(pageDir, 'src');
+const outFile = join(pageDir, 'index.html');
 
 const template = readFileSync(join(srcDir, 'template.html'), 'utf8');
 const style = readFileSync(join(srcDir, 'style.css'), 'utf8').trim();
