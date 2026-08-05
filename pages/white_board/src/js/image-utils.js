@@ -20,13 +20,13 @@
     }
 
     async function getNodeImageBlob(node) {
-      if (node.imageId) {
-        const blob = await getImageFromDB(node.imageId);
-        if (blob) return blob;
-      }
       if (node.src) {
         const res = await fetch(node.src);
         if (res.ok) return res.blob();
+      }
+      if (node.imageId) {
+        const blob = await getImageFromDB(node.imageId);
+        if (blob) return blob;
       }
       return null;
     }
@@ -68,7 +68,7 @@
     }
 
 
-async function addImageNodeFromBlob(blob, wx, wy) {
+    async function createImageNodeFromBlob(blob, { base = {}, imageId, centerX, centerY } = {}) {
       const originalUrl = URL.createObjectURL(blob);
       let committed = false;
       try {
@@ -76,22 +76,29 @@ async function addImageNodeFromBlob(blob, wx, wy) {
         const originalWidth = img.naturalWidth || img.width;
         const originalHeight = img.naturalHeight || img.height;
         const cb = await compressImageToWebP(blob);
-        const imageId = genId();
-        await saveImageToDB(imageId, cb);
-        useStore.getState().addNode({
-          id: genId(),
+        const finalImageId = imageId || genId();
+        await saveImageToDB(finalImageId, cb);
+        const node = {
+          ...base,
+          id: base.id || genId(),
           type: 'image',
-          x: wx - originalWidth / 2,
-          y: wy - originalHeight / 2,
-          width: originalWidth,
-          height: originalHeight,
-          originalWidth,
-          originalHeight,
+          x: centerX !== undefined ? centerX - originalWidth / 2 : base.x ?? 0,
+          y: centerY !== undefined ? centerY - originalHeight / 2 : base.y ?? 0,
+          width: base.width ?? originalWidth,
+          height: base.height ?? originalHeight,
+          originalWidth: base.originalWidth || originalWidth,
+          originalHeight: base.originalHeight || originalHeight,
           src: originalUrl,
-          imageId,
-        });
+          imageId: finalImageId,
+        };
         committed = true;
+        return node;
       } finally {
         if (!committed) URL.revokeObjectURL(originalUrl);
       }
+    }
+
+    async function addImageNodeFromBlob(blob, wx, wy) {
+      const node = await createImageNodeFromBlob(blob, { centerX: wx, centerY: wy });
+      useStore.getState().addNode(node);
     }

@@ -8,7 +8,7 @@ function useImageLoader() {
             for (const node of board.nodes) {
               if (cancelled) return;
               if (node.type === 'image' && node.imageId && (!node.src || node.src === '' || node.src === 'undefined')) {
-                try { const blob = await getImageFromDB(node.imageId); if (blob && !cancelled) updateNode(node.id, { src: URL.createObjectURL(blob) }); } catch { }
+                try { const blob = await getNodeImageBlob(node); if (blob && !cancelled) updateNode(node.id, { src: URL.createObjectURL(blob) }); } catch { }
               }
             }
           }
