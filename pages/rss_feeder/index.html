@@ -1,0 +1,1234 @@
+<!DOCTYPE html>
+<html lang="zh-CN" class="dark">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>RSS Reader</title>
+
+  <script type="importmap">
+    {
+      "imports": {
+        "react": "https://esm.sh/react@19.2.4",
+        "react/jsx-runtime": "https://esm.sh/react@19.2.4/jsx-runtime",
+        "react-dom/client": "https://esm.sh/react-dom@19.2.4/client",
+        "lucide-react": "https://esm.sh/lucide-react?external=react",
+        "zustand": "https://esm.sh/zustand?external=react",
+        "dompurify": "https://esm.sh/dompurify@3.2.6"
+      }
+    }
+  </script>
+  <script src="https://cdn.jsdelivr.net/npm/@babel/standalone@latest/babel.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+
+  <style>
+    html,
+    body,
+    #root {
+      height: 100%;
+    }
+
+    body {
+      margin: 0;
+    }
+
+    .line-clamp-2 {
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+
+    .article-content {
+      color: #e2e8f0;
+      line-height: 1.75;
+      word-break: break-word;
+    }
+
+    .article-content h1,
+    .article-content h2,
+    .article-content h3,
+    .article-content h4 {
+      font-weight: 600;
+      margin: 0.6em 0 0.3em;
+      line-height: 1.3;
+    }
+
+    .article-content h1 {
+      font-size: 1.7em;
+    }
+
+    .article-content h2 {
+      font-size: 1.4em;
+    }
+
+    .article-content h3 {
+      font-size: 1.2em;
+    }
+
+    .article-content p {
+      margin: 0.5em 0;
+    }
+
+    .article-content a {
+      color: #60a5fa;
+      text-decoration: none;
+    }
+
+    .article-content a:hover {
+      text-decoration: underline;
+    }
+
+    .article-content img,
+    .article-content video,
+    .article-content iframe {
+      max-width: 100%;
+      height: auto;
+      border-radius: 0.75rem;
+    }
+
+    .article-content pre {
+      background: #0f172a;
+      padding: 0.75rem 1rem;
+      border-radius: 0.75rem;
+      overflow: auto;
+      font-size: 0.85em;
+    }
+
+    .article-content code {
+      background: #1e293b;
+      padding: 0.1em 0.3em;
+      border-radius: 0.3em;
+      font-size: 0.9em;
+    }
+
+    .article-content pre code {
+      background: none;
+      padding: 0;
+    }
+
+    .article-content blockquote {
+      border-left: 4px solid #334155;
+      padding-left: 1rem;
+      margin: 0.5em 0;
+      color: #94a3b8;
+    }
+
+    .article-content ul,
+    .article-content ol {
+      padding-left: 1.25rem;
+      margin: 0.5em 0;
+    }
+
+    .article-content li {
+      margin: 0.25em 0;
+    }
+
+    .article-content table {
+      border-collapse: collapse;
+      max-width: 100%;
+    }
+
+    .article-content th,
+    .article-content td {
+      border: 1px solid #334155;
+      padding: 0.25rem 0.5rem;
+    }
+
+    .article-content hr {
+      border: none;
+      border-top: 1px solid #334155;
+      margin: 1em 0;
+    }
+
+    ::-webkit-scrollbar {
+      width: 8px;
+      height: 8px;
+    }
+
+    ::-webkit-scrollbar-thumb {
+      background: #334155;
+      border-radius: 8px;
+    }
+
+    ::-webkit-scrollbar-thumb:hover {
+      background: #475569;
+    }
+
+    ::-webkit-scrollbar-track {
+      background: transparent;
+    }
+  </style>
+</head>
+
+<body class="dark bg-slate-950">
+  <div id="root"></div>
+
+  <script type="text/babel" data-type="module">
+    import * as React from "react";
+    window.React = React;
+
+    import { createRoot } from "react-dom/client";
+    import {
+      Plus,
+      RefreshCw,
+      Rss,
+      BookOpen,
+      Star,
+      Circle,
+      CheckCircle2,
+      Search,
+      Trash2,
+      Download,
+      Upload,
+      ExternalLink,
+      X,
+      Loader2,
+      ArrowDownUp,
+    } from "lucide-react";
+    import { create } from "zustand";
+    import DOMPurify from "dompurify";
+
+    const { useEffect, useMemo, useRef, memo } = React;
+
+    /* ------------------------------ 工具函数 ------------------------------ */
+
+    const uid = () =>
+      globalThis.crypto?.randomUUID
+        ? crypto.randomUUID()
+        : `id_${Date.now().toString(36)}${Math.random().toString(36).slice(2)}`;
+
+    function simpleHash(str) {
+      let h1 = 0xdeadbeef ^ 0;
+      let h2 = 0x41c6ce57 ^ 0;
+      for (let i = 0; i < str.length; i++) {
+        const ch = str.charCodeAt(i);
+        h1 = Math.imul(h1 ^ ch, 2654435761);
+        h2 = Math.imul(h2 ^ ch, 1597334677);
+      }
+      h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507);
+      h2 = Math.imul(h2 ^ (h2 >>> 16), 3266489909);
+      return (h2 >>> 0).toString(16) + (h1 >>> 0).toString(16);
+    }
+
+    function normalizeUrl(input) {
+      let url = input.trim();
+      if (!/^https?:\/\//i.test(url)) url = "https://" + url;
+      const parsed = new URL(url);
+      if (!parsed.hostname.includes(".")) throw new Error("请输入有效的 URL");
+      return parsed.href;
+    }
+
+    function toISO(value) {
+      const d = new Date(value || Date.now());
+      return Number.isNaN(d.getTime()) ? new Date().toISOString() : d.toISOString();
+    }
+
+    function stripHtml(html) {
+      const doc = new DOMParser().parseFromString(html || "", "text/html");
+      return doc.body.textContent || "";
+    }
+
+    function escapeXml(s) {
+      const map = {
+        "<": "&lt;",
+        ">": "&gt;",
+        "&": "&amp;",
+        "'": "&apos;",
+        '"': "&quot;",
+      };
+      return String(s || "").replace(/[<>&'"]/g, (c) => map[c]);
+    }
+
+    function downloadBlob(content, filename, type) {
+      const blob = new Blob([content], { type });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    }
+
+    function formatDate(value) {
+      const d = new Date(value);
+      if (Number.isNaN(d.getTime())) return "";
+      return d.toLocaleString("zh-CN", {
+        year: "numeric",
+        month: "short",
+        day: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+      });
+    }
+
+    function timeAgo(value) {
+      const d = new Date(value);
+      if (Number.isNaN(d.getTime())) return "";
+      const diff = Date.now() - d.getTime();
+      const mins = Math.floor(diff / 60000);
+      if (mins < 1) return "刚刚";
+      if (mins < 60) return `${mins} 分钟前`;
+      const hours = Math.floor(mins / 60);
+      if (hours < 24) return `${hours} 小时前`;
+      const days = Math.floor(hours / 24);
+      if (days < 7) return `${days} 天前`;
+      return d.toLocaleDateString("zh-CN");
+    }
+
+    async function runInBatches(items, limit, fn) {
+      const out = [];
+      for (let i = 0; i < items.length; i += limit) {
+        const batch = items.slice(i, i + limit).map((item, bi) => fn(item, i + bi));
+        const settled = await Promise.allSettled(batch);
+        out.push(...settled);
+      }
+      return out;
+    }
+
+    /* ------------------------------ RSS 抓取与解析 ------------------------------ */
+
+    async function fetchWithTimeout(url, timeout = 20000) {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), timeout);
+      try {
+        return await fetch(url, {
+          signal: controller.signal,
+          headers: {
+            Accept: "application/rss+xml, application/atom+xml, application/xml, text/xml, */*",
+          },
+        });
+      } finally {
+        clearTimeout(timer);
+      }
+    }
+
+    async function fetchWithProxies(url) {
+      const proxies = [
+        (u) => u,
+        (u) => `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`,
+        (u) => `https://corsproxy.io/?url=${encodeURIComponent(u)}`,
+        (u) => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(u)}`,
+      ];
+
+      let lastError;
+      for (const wrap of proxies) {
+        try {
+          const res = await fetchWithTimeout(wrap(url));
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          const text = await res.text();
+          if (!text || text.trim().length < 20) throw new Error("响应为空");
+          return text;
+        } catch (e) {
+          lastError = e;
+        }
+      }
+      throw new Error("无法获取订阅源：" + (lastError?.message || "网络错误"));
+    }
+
+    function parseRssItem(item) {
+      const text = (sel) => item.querySelector(sel)?.textContent?.trim() || "";
+      const contentEncoded = item.getElementsByTagName("content:encoded")[0]?.textContent || "";
+      const description = text("description");
+      const title = text("title");
+      const link =
+        text("link") || item.querySelector("link")?.getAttribute("href") || "";
+      const guid = text("guid") || link;
+      const pubDate =
+        item.getElementsByTagName("pubDate")[0]?.textContent ||
+        item.getElementsByTagName("date")[0]?.textContent ||
+        new Date().toISOString();
+      const author =
+        item.getElementsByTagName("dc:creator")[0]?.textContent ||
+        text("author");
+
+      return {
+        title,
+        link,
+        guid,
+        content: contentEncoded || description,
+        snippet: stripHtml(description).slice(0, 300),
+        published: pubDate,
+        author,
+      };
+    }
+
+    function parseAtomItem(entry) {
+      const text = (sel) => entry.querySelector(sel)?.textContent?.trim() || "";
+      const links = Array.from(entry.querySelectorAll("link"));
+      const linkEl =
+        links.find((l) => l.getAttribute("rel") === "alternate" || !l.getAttribute("rel")) || links[0];
+      const title = text("title");
+      const link = linkEl?.getAttribute("href") || "";
+      const guid = text("id") || link;
+      const content = text("content") || text("summary") || "";
+      const summary = text("summary");
+      const published =
+        text("published") || text("updated") || new Date().toISOString();
+      const author =
+        text("author name") || entry.querySelector("author")?.textContent?.trim() || "";
+
+      return {
+        title,
+        link,
+        guid,
+        content,
+        snippet: stripHtml(summary).slice(0, 300),
+        published,
+        author,
+      };
+    }
+
+    function parseFeed(text) {
+      const doc = new DOMParser().parseFromString(text, "text/xml");
+      if (doc.querySelector("parsererror")) throw new Error("XML 解析失败");
+
+      const isAtom = doc.documentElement?.nodeName === "feed";
+      const title =
+        doc.querySelector("channel > title")?.textContent?.trim() ||
+        doc.querySelector("feed > title")?.textContent?.trim() ||
+        "未命名订阅";
+
+      const items = isAtom
+        ? Array.from(doc.querySelectorAll("entry")).map(parseAtomItem)
+        : Array.from(doc.querySelectorAll("item")).map(parseRssItem);
+
+      return {
+        title,
+        items: items.filter((it) => it.title && (it.link || it.guid)),
+      };
+    }
+
+    function createArticle(item, feed) {
+      const id = simpleHash(feed.id + ":" + (item.guid || item.link || item.title + item.published));
+      return {
+        id,
+        feedId: feed.id,
+        feedTitle: feed.title,
+        title: item.title,
+        link: item.link,
+        guid: item.guid,
+        content: item.content,
+        snippet: item.snippet || stripHtml(item.content).slice(0, 300),
+        author: item.author,
+        publishedAt: toISO(item.published),
+        read: 0,
+        starred: 0,
+      };
+    }
+
+    function sortArticles(arr) {
+      return arr.sort((a, b) => new Date(b.publishedAt) - new Date(a.publishedAt));
+    }
+
+    /* ------------------------------ IndexedDB 封装 ------------------------------ */
+
+    const DB_NAME = "rss-reader";
+    const DB_VERSION = 1;
+    let dbPromise;
+
+    function getDB() {
+      if (!dbPromise) {
+        dbPromise = new Promise((resolve, reject) => {
+          const req = indexedDB.open(DB_NAME, DB_VERSION);
+          req.onupgradeneeded = () => {
+            const db = req.result;
+            if (!db.objectStoreNames.contains("feeds")) {
+              const store = db.createObjectStore("feeds", { keyPath: "id" });
+              store.createIndex("url", "url", { unique: true });
+            }
+            if (!db.objectStoreNames.contains("articles")) {
+              const store = db.createObjectStore("articles", { keyPath: "id" });
+              store.createIndex("feedId", "feedId", { unique: false });
+              store.createIndex("publishedAt", "publishedAt", { unique: false });
+              store.createIndex("read", "read", { unique: false });
+              store.createIndex("starred", "starred", { unique: false });
+            }
+          };
+          req.onsuccess = () => resolve(req.result);
+          req.onerror = () => reject(req.error);
+        });
+      }
+      return dbPromise;
+    }
+
+    async function dbGetAll(storeName) {
+      const db = await getDB();
+      return new Promise((resolve, reject) => {
+        const tx = db.transaction(storeName, "readonly");
+        const req = tx.objectStore(storeName).getAll();
+        req.onsuccess = () => resolve(req.result || []);
+        req.onerror = () => reject(req.error);
+      });
+    }
+
+    async function dbPut(storeName, value) {
+      const db = await getDB();
+      return new Promise((resolve, reject) => {
+        const tx = db.transaction(storeName, "readwrite");
+        tx.objectStore(storeName).put(value);
+        tx.oncomplete = () => resolve(value);
+        tx.onerror = () => reject(tx.error);
+      });
+    }
+
+    async function dbDeleteFeed(feedId) {
+      const db = await getDB();
+      return new Promise((resolve, reject) => {
+        const tx = db.transaction(["feeds", "articles"], "readwrite");
+        tx.objectStore("feeds").delete(feedId);
+        const index = tx.objectStore("articles").index("feedId");
+        const req = index.openCursor(IDBKeyRange.only(feedId));
+        req.onsuccess = () => {
+          const cursor = req.result;
+          if (cursor) {
+            cursor.delete();
+            cursor.continue();
+          }
+        };
+        tx.oncomplete = () => resolve();
+        tx.onerror = () => reject(tx.error);
+      });
+    }
+
+    async function saveArticles(items) {
+      if (!items.length) return [];
+      const db = await getDB();
+      return new Promise((resolve, reject) => {
+        const tx = db.transaction("articles", "readwrite");
+        const store = tx.objectStore("articles");
+        const results = [];
+
+        for (const item of items) {
+          const getReq = store.get(item.id);
+          getReq.onsuccess = () => {
+            const existing = getReq.result;
+            const merged = existing
+              ? { ...item, read: existing.read, starred: existing.starred }
+              : item;
+            store.put(merged);
+            results.push(merged);
+          };
+          getReq.onerror = () => {
+            store.put(item);
+            results.push(item);
+          };
+        }
+
+        tx.oncomplete = () => resolve(results);
+        tx.onerror = () => reject(tx.error);
+      });
+    }
+
+    /* ------------------------------ Zustand Store ------------------------------ */
+
+    const inflightFeeds = new Set();
+
+    const useStore = create((set, get) => ({
+      initialized: false,
+      feeds: [],
+      articles: [],
+      selectedFeedId: "all",
+      selectedArticleId: null,
+      searchQuery: "",
+      sort: "newest",
+      loading: false,
+      refreshingFeeds: {},
+      error: null,
+      toast: null,
+
+      init: async () => {
+        try {
+          const feeds = await dbGetAll("feeds");
+          const articles = await dbGetAll("articles");
+          set({ feeds, articles: sortArticles(articles), initialized: true });
+        } catch (e) {
+          set({ initialized: true, error: "本地数据库加载失败：" + e.message });
+        }
+      },
+
+      setError: (error) => set({ error }),
+      setToast: (toast) => set({ toast }),
+      setSelectedFeedId: (id) => set({ selectedFeedId: id, selectedArticleId: null }),
+      setSelectedArticleId: (id) => set({ selectedArticleId: id }),
+      setSearchQuery: (q) => set({ searchQuery: q }),
+      setSort: (sort) => set({ sort }),
+
+      _addFeedSilent: async (url) => {
+        const normalized = normalizeUrl(url);
+        if (inflightFeeds.has(normalized) || get().feeds.some((f) => f.url === normalized)) {
+          throw new Error("该订阅源已存在");
+        }
+
+        inflightFeeds.add(normalized);
+        try {
+          const text = await fetchWithProxies(normalized);
+          const parsed = parseFeed(text);
+          const feed = {
+            id: uid(),
+            title: parsed.title || normalized,
+            url: normalized,
+            addedAt: new Date().toISOString(),
+          };
+
+          await dbPut("feeds", feed);
+          const articles = parsed.items.map((item) => createArticle(item, feed));
+          const saved = await saveArticles(articles);
+
+          set((s) => {
+            const existing = new Map(s.articles.map((a) => [a.id, a]));
+            saved.forEach((a) => existing.set(a.id, a));
+            return {
+              feeds: [...s.feeds.filter((f) => f.url !== normalized), feed],
+              articles: sortArticles([...existing.values()]),
+            };
+          });
+
+          return feed;
+        } finally {
+          inflightFeeds.delete(normalized);
+        }
+      },
+
+      addFeed: async (url) => {
+        set({ loading: true, error: null });
+        try {
+          const feed = await get()._addFeedSilent(url);
+          set({ toast: `已添加：${feed.title}` });
+          return feed;
+        } catch (e) {
+          set({ error: e.message || "添加失败" });
+          throw e;
+        } finally {
+          set({ loading: false });
+        }
+      },
+
+      removeFeed: async (id) => {
+        const feed = get().feeds.find((f) => f.id === id);
+        if (!feed) return;
+
+        await dbDeleteFeed(id);
+        set((s) => {
+          const articleDeleted = s.articles.some(
+            (a) => a.id === s.selectedArticleId && a.feedId === id
+          );
+          return {
+            feeds: s.feeds.filter((f) => f.id !== id),
+            articles: s.articles.filter((a) => a.feedId !== id),
+            selectedFeedId: s.selectedFeedId === id ? "all" : s.selectedFeedId,
+            selectedArticleId: articleDeleted ? null : s.selectedArticleId,
+          };
+        });
+        set({ toast: `已删除：${feed.title}` });
+      },
+
+      _refreshFeedInternal: async (feed) => {
+        set((s) => ({
+          refreshingFeeds: { ...s.refreshingFeeds, [feed.id]: true },
+        }));
+        try {
+          const text = await fetchWithProxies(feed.url);
+          const parsed = parseFeed(text);
+          const updatedFeed = { ...feed, title: parsed.title || feed.title };
+
+          if (updatedFeed.title !== feed.title) {
+            await dbPut("feeds", updatedFeed);
+          }
+
+          const articles = parsed.items.map((item) => createArticle(item, updatedFeed));
+          const saved = await saveArticles(articles);
+
+          set((s) => {
+            const existing = new Map(s.articles.map((a) => [a.id, a]));
+            saved.forEach((a) => existing.set(a.id, a));
+            return {
+              feeds: s.feeds.map((f) => (f.id === updatedFeed.id ? updatedFeed : f)),
+              articles: sortArticles([...existing.values()]),
+            };
+          });
+        } finally {
+          set((s) => ({
+            refreshingFeeds: { ...s.refreshingFeeds, [feed.id]: false },
+          }));
+        }
+      },
+
+      refreshFeed: async (id) => {
+        const feed = get().feeds.find((f) => f.id === id);
+        if (!feed) return;
+        set({ error: null });
+        await get()._refreshFeedInternal(feed);
+      },
+
+      refreshAll: async () => {
+        const feeds = [...get().feeds];
+        if (!feeds.length) {
+          set({ toast: "暂无订阅源" });
+          return;
+        }
+
+        set({ loading: true, error: null });
+        const results = await runInBatches(feeds, 3, (feed) =>
+          get()._refreshFeedInternal(feed)
+        );
+        const failed = results.filter((r) => r.status === "rejected").length;
+        set({
+          loading: false,
+          toast: `刷新完成：成功 ${feeds.length - failed}，失败 ${failed}`,
+        });
+        if (failed) set({ error: "部分订阅源刷新失败" });
+      },
+
+      openArticle: (id) => {
+        set({ selectedArticleId: id });
+        const article = get().articles.find((a) => a.id === id);
+        if (article && !article.read) get().markRead(id, true);
+      },
+
+      markRead: async (id, read = true) => {
+        const article = get().articles.find((a) => a.id === id);
+        if (!article) return;
+        const updated = { ...article, read: read ? 1 : 0 };
+        set((s) => ({
+          articles: s.articles.map((a) => (a.id === id ? updated : a)),
+        }));
+        await dbPut("articles", updated);
+      },
+
+      toggleStar: async (id) => {
+        const article = get().articles.find((a) => a.id === id);
+        if (!article) return;
+        const updated = { ...article, starred: article.starred ? 0 : 1 };
+        set((s) => ({
+          articles: s.articles.map((a) => (a.id === id ? updated : a)),
+        }));
+        await dbPut("articles", updated);
+      },
+
+      importOPML: async (text) => {
+        let doc;
+        try {
+          doc = new DOMParser().parseFromString(text, "text/xml");
+        } catch (e) {
+          throw new Error("OPML 解析失败");
+        }
+        if (doc.querySelector("parsererror")) throw new Error("OPML 解析失败");
+
+        const urls = Array.from(doc.querySelectorAll("outline[xmlUrl]"))
+          .map((el) => el.getAttribute("xmlUrl"))
+          .filter(Boolean)
+          .map(normalizeUrl);
+
+        const existing = new Set(get().feeds.map((f) => f.url));
+        const toAdd = urls.filter((u) => !existing.has(u));
+
+        if (!toAdd.length) {
+          set({ toast: "没有新的订阅源" });
+          return;
+        }
+
+        set({ loading: true, error: null });
+        const results = await runInBatches(toAdd, 4, (url) =>
+          get()._addFeedSilent(url)
+        );
+        const failed = results.filter((r) => r.status === "rejected").length;
+        set({
+          loading: false,
+          toast: `导入完成：成功 ${toAdd.length - failed}，失败 ${failed}`,
+        });
+        if (failed) set({ error: "部分订阅源导入失败" });
+      },
+
+      exportOPML: () => {
+        const feeds = get().feeds;
+        const outlines = feeds
+          .map((f) => {
+            const title = escapeXml(f.title);
+            const url = escapeXml(f.url);
+            return (
+              '<outline text="' + title + '" title="' + title + '" type="rss" xmlUrl="' + url + '" htmlUrl="' + url + '"/>'
+            );
+          })
+          .join("\n    ");
+
+        const opml =
+          '<?xml version="1.0" encoding="UTF-8"?>\n' +
+          '<opml version="2.0">\n' +
+          '  <head>\n' +
+          '    <title>RSS Reader Feeds</title>\n' +
+          '  </head>\n' +
+          '  <body>\n    ' +
+          outlines +
+          '\n  <' + 'body>\n' +
+          '</' + 'opml>';
+
+        downloadBlob(opml, "feeds.opml", "text/xml");
+      },
+    }));
+
+    /* ------------------------------ UI 组件 ------------------------------ */
+
+    function NavItem({ active, icon: Icon, label, count, onClick, onDelete, iconClassName = "" }) {
+      return (
+        <div
+          role="button"
+          tabIndex={0}
+          onClick={onClick}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === " ") {
+              e.preventDefault();
+              onClick();
+            }
+          }}
+          className={`group flex items-center justify-between px-3 py-2 rounded-xl text-sm cursor-pointer transition border ${active
+            ? "bg-blue-600/15 text-blue-400 border-blue-500/30"
+            : "text-slate-300 hover:bg-slate-800/70 border-transparent"
+            }`}
+        >
+          <div className="flex items-center gap-2 min-w-0">
+            <Icon
+              size={16}
+              className={`shrink-0 ${active ? "text-blue-400" : "text-slate-400"} ${iconClassName}`}
+            />
+            <span className="truncate">{label}</span>
+          </div>
+          <div className="flex items-center gap-1 shrink-0">
+            {count != null && (
+              <span className={`text-xs ${active ? "text-blue-400" : "text-slate-500"}`}>{count}</span>
+            )}
+            {onDelete && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onDelete();
+                }}
+                className="opacity-0 group-hover:opacity-100 p-1 rounded-md hover:bg-slate-700 text-slate-500 hover:text-red-400 transition"
+              >
+                <Trash2 size={12} />
+              </button>
+            )}
+          </div>
+        </div>
+      );
+    }
+
+    const ArticleItem = memo(function ArticleItem({ article, selected, onOpen }) {
+      return (
+        <button
+          onClick={() => onOpen(article.id)}
+          className={`w-full text-left px-4 py-3 border-b border-slate-800/60 transition hover:bg-slate-800/50 ${selected ? "bg-slate-800/80 ring-1 ring-inset ring-blue-500/20" : ""
+            }`}
+        >
+          <div className="flex items-start gap-2">
+            <div className="flex-1 min-w-0">
+              <div className="flex items-start gap-2">
+                {!article.read && (
+                  <span className="mt-1.5 w-2 h-2 rounded-full bg-blue-500 shrink-0" />
+                )}
+                <h3
+                  className={`text-sm leading-snug line-clamp-2 ${article.read ? "text-slate-400" : "text-slate-100 font-semibold"
+                    }`}
+                >
+                  {article.title}
+                </h3>
+              </div>
+              <div className="flex items-center gap-1.5 mt-1 text-xs text-slate-500">
+                {article.starred ? (
+                  <Star size={12} className="fill-yellow-400 text-yellow-400 shrink-0" />
+                ) : null}
+                <span className="truncate">{article.feedTitle}</span>
+                <span>·</span>
+                <span className="shrink-0">{timeAgo(article.publishedAt)}</span>
+              </div>
+              {article.snippet ? (
+                <p className="text-xs text-slate-500 mt-1 line-clamp-2">{article.snippet}</p>
+              ) : null}
+            </div>
+          </div>
+        </button>
+      );
+    });
+
+    function Sidebar() {
+      const feeds = useStore((s) => s.feeds);
+      const articles = useStore((s) => s.articles);
+      const selectedFeedId = useStore((s) => s.selectedFeedId);
+      const setSelectedFeedId = useStore((s) => s.setSelectedFeedId);
+      const addFeed = useStore((s) => s.addFeed);
+      const removeFeed = useStore((s) => s.removeFeed);
+      const refreshAll = useStore((s) => s.refreshAll);
+      const importOPML = useStore((s) => s.importOPML);
+      const exportOPML = useStore((s) => s.exportOPML);
+      const error = useStore((s) => s.error);
+      const setError = useStore((s) => s.setError);
+      const loading = useStore((s) => s.loading);
+      const refreshingFeeds = useStore((s) => s.refreshingFeeds);
+      const fileInputRef = useRef(null);
+
+      const unreadCount = articles.filter((a) => !a.read).length;
+      const starredCount = articles.filter((a) => a.starred).length;
+
+      const handleAddFeed = async (e) => {
+        e.preventDefault();
+        const form = e.currentTarget;
+        const url = new FormData(form).get("url")?.toString().trim();
+        if (!url) return;
+        await addFeed(url).catch(() => { });
+        form.reset();
+      };
+
+      const handleImportFile = async (e) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        try {
+          const text = await file.text();
+          await importOPML(text);
+        } catch (err) {
+          setError(err.message || "导入失败");
+        } finally {
+          e.target.value = "";
+        }
+      };
+
+      return (
+        <aside className="hidden md:flex w-72 shrink-0 flex-col border-r border-slate-800/80 bg-slate-900/60 backdrop-blur">
+          <div className="p-4 border-b border-slate-800/80 space-y-3">
+            <div className="flex items-center gap-2 text-xl font-bold text-slate-100">
+              <Rss className="text-blue-400" />
+              RSS Reader
+            </div>
+
+            <form onSubmit={handleAddFeed} className="flex gap-2">
+              <input
+                name="url"
+                type="url"
+                placeholder="https://feeds.example.com/rss"
+                className="min-w-0 flex-1 bg-slate-800/80 border border-slate-700 rounded-xl px-3 py-2 text-sm text-slate-200 placeholder-slate-500 outline-none focus:ring-2 focus:ring-blue-500/40"
+              />
+              <button
+                disabled={loading}
+                className="flex items-center justify-center gap-1 px-3 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-sm font-semibold disabled:opacity-50 transition"
+              >
+                <Plus size={16} />
+                添加
+              </button>
+            </form>
+
+            <div className="flex gap-2">
+              <button
+                onClick={() => refreshAll().catch(() => { })}
+                className="flex items-center justify-center gap-1 flex-1 px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-sm text-slate-300 transition"
+              >
+                <RefreshCw size={14} className={loading ? "animate-spin" : ""} />
+                刷新
+              </button>
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                className="flex items-center justify-center gap-1 px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-sm text-slate-300 transition"
+              >
+                <Upload size={14} />
+                导入
+              </button>
+              <button
+                onClick={exportOPML}
+                className="flex items-center justify-center gap-1 px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-sm text-slate-300 transition"
+              >
+                <Download size={14} />
+                导出
+              </button>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".opml,.xml"
+                className="hidden"
+                onChange={handleImportFile}
+              />
+            </div>
+
+            {error && (
+              <div className="flex items-start gap-2 p-3 rounded-xl bg-red-500/10 border border-red-500/30 text-red-400 text-xs">
+                <span className="flex-1">{error}</span>
+                <button onClick={() => setError(null)}>
+                  <X size={14} />
+                </button>
+              </div>
+            )}
+          </div>
+
+          <nav className="p-3 space-y-1">
+            <NavItem
+              active={selectedFeedId === "all"}
+              icon={BookOpen}
+              label="全部文章"
+              count={articles.length}
+              onClick={() => setSelectedFeedId("all")}
+            />
+            <NavItem
+              active={selectedFeedId === "unread"}
+              icon={Circle}
+              label="未读文章"
+              count={unreadCount}
+              onClick={() => setSelectedFeedId("unread")}
+            />
+            <NavItem
+              active={selectedFeedId === "starred"}
+              icon={Star}
+              label="收藏文章"
+              count={starredCount}
+              onClick={() => setSelectedFeedId("starred")}
+            />
+          </nav>
+
+          <div className="flex-1 overflow-y-auto px-3 pb-4">
+            <div className="flex items-center justify-between px-2 py-2 text-xs font-semibold uppercase tracking-wider text-slate-500">
+              <span>订阅源</span>
+              <span>{feeds.length}</span>
+            </div>
+            <div className="space-y-1">
+              {feeds.length === 0 ? (
+                <p className="text-xs text-slate-600 px-2 py-4">还没有订阅，先添加一个吧</p>
+              ) : (
+                feeds.map((f) => {
+                  const isRefreshing = !!refreshingFeeds[f.id];
+                  const unread = articles.filter((a) => a.feedId === f.id && !a.read).length;
+                  return (
+                    <NavItem
+                      key={f.id}
+                      active={selectedFeedId === f.id}
+                      icon={isRefreshing ? Loader2 : Rss}
+                      iconClassName={isRefreshing ? "animate-spin" : ""}
+                      label={f.title}
+                      count={unread}
+                      onClick={() => setSelectedFeedId(f.id)}
+                      onDelete={() => {
+                        if (window.confirm(`删除「${f.title}」及其所有文章？`)) {
+                          removeFeed(f.id);
+                        }
+                      }}
+                    />
+                  );
+                })
+              )}
+            </div>
+          </div>
+        </aside>
+      );
+    }
+
+    function ArticleList() {
+      const articles = useStore((s) => s.articles);
+      const selectedFeedId = useStore((s) => s.selectedFeedId);
+      const selectedArticleId = useStore((s) => s.selectedArticleId);
+      const searchQuery = useStore((s) => s.searchQuery);
+      const sort = useStore((s) => s.sort);
+      const setSearchQuery = useStore((s) => s.setSearchQuery);
+      const setSort = useStore((s) => s.setSort);
+      const openArticle = useStore((s) => s.openArticle);
+
+      const filtered = useMemo(() => {
+        let list = articles;
+        if (selectedFeedId === "unread") list = list.filter((a) => !a.read);
+        else if (selectedFeedId === "starred") list = list.filter((a) => a.starred);
+        else if (selectedFeedId !== "all") list = list.filter((a) => a.feedId === selectedFeedId);
+
+        const q = searchQuery.trim().toLowerCase();
+        if (q) {
+          list = list.filter((a) =>
+            `${a.title} ${a.snippet || ""} ${a.feedTitle}`.toLowerCase().includes(q)
+          );
+        }
+
+        return [...list].sort((a, b) =>
+          sort === "oldest"
+            ? new Date(a.publishedAt) - new Date(b.publishedAt)
+            : new Date(b.publishedAt) - new Date(a.publishedAt)
+        );
+      }, [articles, selectedFeedId, searchQuery, sort]);
+
+      return (
+        <section className="flex-1 lg:flex-none lg:w-96 shrink-0 border-r border-slate-800/80 flex flex-col bg-slate-950/70 min-w-0">
+          <div className="p-3 border-b border-slate-800/80 space-y-2">
+            <div className="relative">
+              <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
+              <input
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="搜索标题、摘要或订阅源..."
+                className="w-full bg-slate-800/70 border border-slate-700 rounded-xl pl-9 pr-3 py-2 text-sm text-slate-200 placeholder-slate-500 outline-none focus:ring-2 focus:ring-blue-500/40"
+              />
+            </div>
+            <div className="flex items-center justify-between text-xs text-slate-500">
+              <span>{filtered.length} 篇文章</span>
+              <button
+                onClick={() => setSort(sort === "newest" ? "oldest" : "newest")}
+                className="flex items-center gap-1 px-2 py-1 rounded-lg hover:bg-slate-800 transition"
+              >
+                <ArrowDownUp size={13} />
+                {sort === "newest" ? "最新优先" : "最早优先"}
+              </button>
+            </div>
+          </div>
+
+          <div className="flex-1 overflow-y-auto">
+            {filtered.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-16 text-slate-600">
+                <BookOpen size={40} className="mb-3" />
+                <p className="text-sm">没有匹配的文章</p>
+              </div>
+            ) : (
+              filtered.map((a) => (
+                <ArticleItem
+                  key={a.id}
+                  article={a}
+                  selected={a.id === selectedArticleId}
+                  onOpen={openArticle}
+                />
+              ))
+            )}
+          </div>
+        </section>
+      );
+    }
+
+    function ReaderPane() {
+      const article = useStore((s) => s.articles.find((a) => a.id === s.selectedArticleId));
+      const toggleStar = useStore((s) => s.toggleStar);
+      const markRead = useStore((s) => s.markRead);
+      const setSelectedArticleId = useStore((s) => s.setSelectedArticleId);
+
+      const sanitizedContent = useMemo(() => {
+        if (!article) return "";
+        return DOMPurify.sanitize(article.content || article.snippet || "");
+      }, [article]);
+
+      if (!article) {
+        return (
+          <main className="hidden lg:flex flex-1 items-center justify-center bg-slate-950/60 min-w-0">
+            <div className="text-center text-slate-700">
+              <BookOpen size={48} className="mx-auto mb-3" />
+              <p className="text-sm">选择一篇文章开始阅读</p>
+            </div>
+          </main>
+        );
+      }
+
+      return (
+        <main className="hidden lg:flex flex-1 min-w-0 flex-col bg-slate-950/80">
+          <header className="p-6 border-b border-slate-800/80">
+            <div className="flex items-start justify-between gap-4">
+              <div className="min-w-0">
+                <h1 className="text-2xl font-bold text-slate-100 leading-tight">{article.title}</h1>
+                <div className="flex items-center gap-2 mt-3 text-sm text-slate-400 flex-wrap">
+                  <Rss size={14} />
+                  <span>{article.feedTitle}</span>
+                  <span>·</span>
+                  <span>{formatDate(article.publishedAt)}</span>
+                  {article.author ? (
+                    <>
+                      <span>·</span>
+                      <span>{article.author}</span>
+                    </>
+                  ) : null}
+                </div>
+              </div>
+
+              <div className="flex items-center gap-1 shrink-0">
+                <button
+                  onClick={() => toggleStar(article.id)}
+                  title={article.starred ? "取消收藏" : "收藏"}
+                  className="p-2 rounded-xl hover:bg-slate-800 text-slate-400 transition"
+                >
+                  <Star size={18} className={article.starred ? "fill-yellow-400 text-yellow-400" : ""} />
+                </button>
+                <button
+                  onClick={() => markRead(article.id, !article.read)}
+                  title={article.read ? "标记为未读" : "标记为已读"}
+                  className="p-2 rounded-xl hover:bg-slate-800 text-slate-400 transition"
+                >
+                  {article.read ? <CheckCircle2 size={18} /> : <Circle size={18} />}
+                </button>
+                {article.link ? (
+                  <a
+                    href={article.link}
+                    target="_blank"
+                    rel="noreferrer"
+                    title="打开原文"
+                    className="p-2 rounded-xl hover:bg-slate-800 text-slate-400 transition"
+                  >
+                    <ExternalLink size={18} />
+                  </a>
+                ) : null}
+                <button
+                  onClick={() => setSelectedArticleId(null)}
+                  title="关闭"
+                  className="p-2 rounded-xl hover:bg-slate-800 text-slate-400 transition"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+            </div>
+          </header>
+
+          <div className="flex-1 overflow-y-auto p-6">
+            {sanitizedContent ? (
+              <div className="article-content" dangerouslySetInnerHTML={{ __html: sanitizedContent }} />
+            ) : (
+              <p className="text-slate-400 whitespace-pre-wrap">{article.snippet || "暂无内容"}</p>
+            )}
+          </div>
+        </main>
+      );
+    }
+
+    function Toast() {
+      const toast = useStore((s) => s.toast);
+      const setToast = useStore((s) => s.setToast);
+
+      useEffect(() => {
+        if (!toast) return;
+        const timer = setTimeout(() => setToast(null), 2600);
+        return () => clearTimeout(timer);
+      }, [toast, setToast]);
+
+      if (!toast) return null;
+
+      return (
+        <div className="fixed bottom-5 left-1/2 -translate-x-1/2 z-50 bg-slate-800/95 border border-slate-700 text-slate-100 text-sm px-4 py-2 rounded-xl shadow-2xl">
+          {toast}
+        </div>
+      );
+    }
+
+    function App() {
+      const initialized = useStore((s) => s.initialized);
+      const init = useStore((s) => s.init);
+
+      useEffect(() => {
+        init();
+      }, [init]);
+
+      if (!initialized) {
+        return (
+          <div className="h-screen flex items-center justify-center bg-slate-950 text-slate-400">
+            <Loader2 className="animate-spin mr-2" size={20} />
+            加载中...
+          </div>
+        );
+      }
+
+      return (
+        <div className="h-screen w-full flex bg-slate-950 text-slate-200 overflow-hidden">
+          <Sidebar />
+          <ArticleList />
+          <ReaderPane />
+          <Toast />
+        </div>
+      );
+    }
+
+    createRoot(document.getElementById("root")).render(<App />);
+  </script>
+</body>
+
+</html>

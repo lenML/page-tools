@@ -16,6 +16,7 @@ Publish 1 page tools using github pages
 | [Prompt Builder](https://lenml.github.io/page-tools/prompt_builder) | prompt_builder | 提示词模板工具，用于构建提示词，并支持管道函数 | [source](https://github.com/lenml/page-tools/tree/main/pages/prompt_builder) |
 | [pr context](https://lenml.github.io/page-tools/pr_ctx) | pr_ctx | 用来白嫖web端ai | [source](https://github.com/lenml/page-tools/tree/main/pages/pr_ctx) |
 | [Local Red Time](https://lenml.github.io/page-tools/red_light_time) | red_light_time | — | [source](https://github.com/lenml/page-tools/tree/main/pages/red_light_time) |
+| [rss feeder](https://lenml.github.io/page-tools/rss_feeder) | rss_feeder | rss阅读器 | [source](https://github.com/lenml/page-tools/tree/main/pages/rss_feeder) |
 | [文本diff](https://lenml.github.io/page-tools/textdiff) | textdiff | 支持 行、句子、词、字符 级别 diff | [source](https://github.com/lenml/page-tools/tree/main/pages/textdiff) |
 | [text face maker](https://lenml.github.io/page-tools/text_face_maker) | text_face_maker | 文本捏脸工具 | [source](https://github.com/lenml/page-tools/tree/main/pages/text_face_maker) |
 | [text to image](https://lenml.github.io/page-tools/txt2img) | txt2img | 文本渲染为图片 | [source](https://github.com/lenml/page-tools/tree/main/pages/txt2img) |
